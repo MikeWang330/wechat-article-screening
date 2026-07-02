@@ -7,6 +7,14 @@
 
 搜狗跳转链接依赖本机浏览器复核，所以不建议放到 GitHub Actions 云端运行。请克隆到自己的电脑本地使用。每个人跑出来的数据只保存在自己的本地。
 
+## 新手怎么用
+
+最简单的理解方式：
+
+1. 去 MinerU 创建 Token。
+2. 把 Token 放到本地电脑。
+3. 把你的需求告诉 AI，让 AI 帮你运行自动模式。
+
 ## 安装
 
 ```powershell
@@ -14,6 +22,14 @@ pip install -r requirements.txt
 ```
 
 ## 设置 MinerU Token
+
+先进入 MinerU 的 Token 页面：
+
+```text
+https://mineru.net/apiManage/token
+```
+
+创建或复制你的 API Token。
 
 推荐用环境变量：
 
@@ -28,8 +44,9 @@ $env:MINERU_TOKEN="你的 MinerU Token"
 如果你准备用 AI 帮你操作这个项目，推荐直接把这个仓库链接给 AI，然后这样说：
 
 ```text
-请使用这个仓库的 SKILL.md，帮我把需求整理成自动模式命令。
+请使用这个仓库的 SKILL.md，帮我在本地运行自动模式。
 我的需求是：2025年至今，找 20 篇 AI 硬件品牌营销案例相关的微信公众号文章。
+我已经准备好了 MinerU Token。
 ```
 
 AI 会先判断你的需求是否清楚；如果不清楚，会问少量关键问题。确认后，它应该优先给出或直接运行下面这种自动模式命令：
@@ -102,6 +119,24 @@ runs/
     successful_urls.txt
     summary.md
     run_state.json
+```
+
+你真正要看的 Markdown 文件在：
+
+```text
+runs/某次运行的目录/markdown/
+```
+
+例如：
+
+```text
+runs/20260702-120000-urls/markdown/
+```
+
+如果不知道最新一次是哪一个，看项目根目录里的：
+
+```text
+latest_run.txt
 ```
 
 自动搜索阶段会生成：
