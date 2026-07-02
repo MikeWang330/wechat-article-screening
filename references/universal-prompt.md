@@ -34,6 +34,8 @@ After I answer:
    - Add `-OnlyUrls` only if I want to stop after generating `urls.txt` and not run MinerU.
    - Use graded relevance. Prefer exact matches first, then articles that would help me write a report on the topic. If exact matches are sparse, include clearly useful core-related context instead of returning an unnecessarily tiny list.
    - Keep runtime bounded. In `fast` mode, use a screening pool no larger than `count * 2`. In `slow` mode, allow broader search up to about `count * 3`, but do not keep launching manual extra rounds indefinitely just to force an exact count.
+   - Stay on the high-level project entry point. Do not bypass `run_auto.ps1` to call low-level scripts with larger query limits unless I explicitly ask for a custom research run.
+   - If automatic mode returns fewer usable articles than requested, report the shortfall and use the best verified articles. Do not keep expanding date ranges, adding unrelated keywords, or manually stitching weak results just to reach the requested number.
 
 2. Build search query groups:
    - Core topic terms.

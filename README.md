@@ -1,37 +1,28 @@
 # 微信公众号文章搜索筛选 + MinerU 批量解析
 
-这个项目只推荐两个入口：
+这个项目在你的电脑本地运行，用来做两件事：
 
-- **自动模式**：输入主题和数量，程序自动找文章、筛选、转换真实公众号链接，并继续跑 MinerU。
-- **手动模式**：你已经有公众号链接，放进 `urls.txt`，程序只跑 MinerU。
+1. 自动搜索、筛选微信公众号文章，并转换成真实 `mp.weixin.qq.com` 链接。
+2. 把公众号文章交给 MinerU 解析，生成 Markdown 文件。
 
-搜狗跳转链接依赖本机浏览器复核，所以不建议放到 GitHub Actions 云端运行。请克隆到自己的电脑本地使用。每个人跑出来的数据只保存在自己的本地。
+搜狗跳转链接依赖本机浏览器复核，所以不建议放到 GitHub Actions 云端运行。每个人跑出来的数据只保存在自己的本地，不会上传到 GitHub。
 
-## 新手怎么用
+## 先准备
 
-最简单的理解方式：
-
-1. 去 MinerU 创建 Token。
-2. 把 Token 放到本地电脑。
-3. 把你的需求告诉 AI，让 AI 帮你运行自动模式。
-
-## 安装
+1. 安装 Python。
+2. 安装依赖：
 
 ```powershell
 pip install -r requirements.txt
 ```
 
-## 设置 MinerU Token
-
-先进入 MinerU 的 Token 页面：
+3. 去 MinerU 获取 Token：
 
 ```text
 https://mineru.net/apiManage/token
 ```
 
-创建或复制你的 API Token。
-
-推荐用环境变量：
+4. 设置 Token，推荐用环境变量：
 
 ```powershell
 $env:MINERU_TOKEN="你的 MinerU Token"
@@ -39,9 +30,15 @@ $env:MINERU_TOKEN="你的 MinerU Token"
 
 也可以在项目目录下创建 `mineru_token.txt`，把 Token 单独放进去。这个文件不会上传到 GitHub。
 
-## 自动模式
+## AI 用户
 
-如果你准备用 AI 帮你操作这个项目，推荐直接把这个仓库链接给 AI，然后这样说：
+适合你把这个仓库链接发给 Codex、Claude、ChatGPT、DeepSeek 等 AI，让 AI 在你的电脑上帮你跑。
+
+### AI 用户：自动模式
+
+你只需要把需求说清楚。建议告诉 AI：主题、时间范围、需要几篇、什么文章算好、不要什么。
+
+可以这样说：
 
 ```text
 请使用这个仓库的 SKILL.md，帮我在本地运行自动模式。
@@ -49,80 +46,82 @@ $env:MINERU_TOKEN="你的 MinerU Token"
 我已经准备好了 MinerU Token。
 ```
 
-AI 会先判断你的需求是否清楚；如果不清楚，会问少量关键问题。确认后，它应该优先给出或直接运行下面这种自动模式命令：
+AI 应该优先使用这个入口：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "AI 硬件 品牌营销案例 2025年至今" -Count 20
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "AI 硬件品牌营销案例 2025年至今" -Count 20
 ```
 
-最简单用法：
+自动模式默认规则：
+
+- 默认 `slow`，适合商业分析，搜索更充分，但不会无限补轮次。
+- 如果没有写时间范围，默认看最近一年。
+- 如果主题不是明确营销问题，默认用通用筛选，不强行套营销逻辑。
+- 如果符合要求的文章不够，宁可少给，也不要拼凑弱相关内容。
+- 如果文章已删除、不可查看或没有正文，会自动跳过，不生成无效 Markdown。
+
+如果你只想快速预览，让 AI 用 `fast`：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 品牌案例 赞助商" -Count 20
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "百岁山降价" -Count 20 -Mode fast
 ```
 
-自动模式有两种搜索强度：
-
-- `slow`：默认模式。搜索更充分，尽量接近用户要的数量，但仍然有上限，避免跑太久。
-- `fast`：快速模式。只做一轮紧凑搜索，最多复核 `需求数量 × 2` 的候选，适合先快速看结果。
-
-如果想快一点：
+如果你想更充分一点，让 AI 用 `slow`：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 品牌案例 赞助商" -Count 20 -Mode fast
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "百岁山降价" -Count 20 -Mode slow
 ```
 
-如果想尽量多找一点：
+`fast` 和 `slow` 的区别：
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 品牌案例 赞助商" -Count 20 -Mode slow
-```
+- `fast`：只做紧凑搜索，最多复核 `需求数量 × 2` 的候选，适合先看方向。
+- `slow`：默认模式，最多复核约 `需求数量 × 3` 的候选，适合正式分析。
 
-自动模式会自己处理默认策略：
+### AI 用户：手动模式
 
-- 如果没写时间范围，默认看最近一年。
-- 默认使用通用筛选模式，不强行套营销逻辑。
-- 默认只保留质量达到 `maybe` 或 `strong` 的文章。
-- 默认使用分级相关：优先精确命中；如果主题内容较少，会补充核心实体相关、能帮助理解主题的背景文章。
-- `fast` 最多复核 `需求数量 × 2` 的候选文章，`slow` 最多复核 `需求数量 × 3` 的候选文章。
-- 如果微信公众号文章已删除、不可查看或没有正文，会自动跳过，不会生成无效 Markdown。
-
-如果只想先生成 `urls.txt`，不跑 MinerU：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 品牌案例 赞助商" -Count 20 -OnlyUrls
-```
-
-如果上一次 MinerU 有失败链接，可以直接重试失败项：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\run_retry_failed.ps1
-```
-
-## 常见提示
-
-如果看到：
+如果你已经自己找好了公众号链接，直接把链接发给 AI，并说：
 
 ```text
-daily web crawl limit reached max: 100 tasks, submit tomorrow
+请把这些微信公众号链接写入 urls.txt，然后运行手动模式解析。
 ```
 
-意思是 MinerU 当天网页抓取额度已经用完了，不是程序坏了。第二天额度恢复后，重新运行即可：
+AI 应该把链接放进 `urls.txt`，每行一个，然后运行：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\run_manual.ps1
 ```
 
-如果某篇微信公众号文章已经被删除、违规不可查看，程序会把它写进 `failed_urls.txt`，不会放进最终 Markdown。
+## 本地用户
 
-如果只想继续某一步，也可以用自动模式的阶段参数：
+适合你自己打开 PowerShell，在项目目录里运行。
+
+### 本地用户：自动模式
+
+最简单命令：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Stage mineru
-powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Stage retry
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 品牌案例 赞助商" -Count 20
 ```
 
-## 手动模式
+快速模式：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 品牌案例 赞助商" -Count 20 -Mode fast
+```
+
+指定时间范围：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 品牌案例 赞助商" -Count 20 -StartDate "2025-01-01" -EndDate "2026-07-02"
+```
+
+只生成 `urls.txt`，先不跑 MinerU：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 品牌案例 赞助商" -Count 20 -OnlyUrls
+```
+
+### 本地用户：手动模式
 
 先创建 `urls.txt`，每行放一个微信公众号文章链接：
 
@@ -137,23 +136,18 @@ https://mp.weixin.qq.com/s/yyyy
 powershell -ExecutionPolicy Bypass -File .\run_manual.ps1
 ```
 
-## 输出位置
+## 输出在哪里
 
 每次 MinerU 解析都会保存到新的运行目录：
 
 ```text
 runs/
   20260702-120000-urls/
-    html/
     markdown/
-    zip/
-    extract/
-    html_manifest.json
     result.json
     failed_urls.txt
     successful_urls.txt
     summary.md
-    run_state.json
 ```
 
 你真正要看的 Markdown 文件在：
@@ -162,25 +156,16 @@ runs/
 runs/某次运行的目录/markdown/
 ```
 
-例如：
-
-```text
-runs/20260702-120000-urls/markdown/
-```
-
 如果不知道最新一次是哪一个，看项目根目录里的：
 
 ```text
 latest_run.txt
 ```
 
-自动搜索阶段会生成：
+自动搜索阶段会生成候选清单：
 
 ```text
 candidates/
-  *.csv
-  *.md
-  *-screened-pool.csv
 ```
 
 长期索引保存在：
@@ -189,13 +174,31 @@ candidates/
 library/articles_index.csv
 ```
 
-这些都是本地运行数据，不会上传到 GitHub。
+## 常见问题
 
-## 筛选 Skill
+如果看到：
 
-这个仓库本身也可以作为一个可复用的微信公众号文章筛选 Skill。
+```text
+daily web crawl limit reached max: 100 tasks, submit tomorrow
+```
 
-Skill 文件在仓库根目录：
+意思是 MinerU 当天网页抓取额度已经用完了，不是程序坏了。第二天额度恢复后，可以直接跑手动模式继续解析已有的 `urls.txt`：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run_manual.ps1
+```
+
+如果上一次 MinerU 有失败链接，可以重试失败项：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run_retry_failed.ps1
+```
+
+如果某篇微信公众号文章已经删除、违规不可查看、没有正文，程序会写进 `failed_urls.txt`，不会放进最终 Markdown。
+
+## 给 AI 的 Skill 文件
+
+这个仓库可以直接作为微信公众号文章筛选 Skill 使用：
 
 ```text
 SKILL.md
@@ -203,10 +206,8 @@ agents/openai.yaml
 references/universal-prompt.md
 ```
 
-其中：
-
-- `SKILL.md`：给 Codex 这类 Skill 系统使用
-- `references/universal-prompt.md`：可以复制给 Claude、ChatGPT、DeepSeek 等 AI 使用
+- `SKILL.md`：给 Codex 这类 Skill 系统使用。
+- `references/universal-prompt.md`：可以复制给 Claude、ChatGPT、DeepSeek 等 AI 使用。
 
 ## 本地数据不会上传
 
