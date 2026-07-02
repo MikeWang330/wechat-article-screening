@@ -226,6 +226,7 @@ class Candidate:
     score: int = 0
     rating: str = "weak"
     reason: str = ""
+    relevance_tier: str = "weak"
     resolved_url: str = ""
     resolve_status: str = "pending"
 
@@ -374,6 +375,34 @@ def candidate_matches_required_intent(candidate: Candidate, topic: str) -> bool:
     return any(normalize_text(term) in blob for term in required_terms)
 
 
+def relevance_tier(candidate: Candidate, topic: str) -> str:
+    compact_blob = normalize_text(f"{candidate.title} {candidate.snippet}")
+    compact_topic = normalize_text(topic)
+    has_exact_topic = bool(compact_topic and compact_topic in compact_blob)
+    has_core = candidate_matches_core_topic(candidate, topic)
+    required_terms = required_intent_terms(topic)
+    has_required_intent = candidate_matches_required_intent(candidate, topic)
+
+    if has_exact_topic:
+        return "exact"
+    if has_core and required_terms and has_required_intent:
+        return "core_intent"
+    if has_core:
+        return "core_related"
+    if not core_topic_terms(topic) and has_required_intent:
+        return "intent_related"
+    return "weak"
+
+
+RELEVANCE_TIER_PRIORITY = {
+    "exact": 4,
+    "core_intent": 3,
+    "core_related": 2,
+    "intent_related": 1,
+    "weak": 0,
+}
+
+
 def score_candidate(candidate: Candidate, topic: str, focus: str = "auto", extra_keywords: str = "") -> None:
     title_blob = f"{candidate.title} {candidate.snippet}"
     compact_blob = normalize_text(title_blob)
@@ -431,9 +460,6 @@ def score_candidate(candidate: Candidate, topic: str, focus: str = "auto", extra
     if core_terms and not has_core_match and compact_topic not in compact_blob:
         score -= 4
         reasons.append("missing core topic")
-    if not has_required_intent:
-        score -= 4
-        reasons.append("missing required intent")
 
     candidate.score = score
     if score >= 8:
@@ -442,6 +468,9 @@ def score_candidate(candidate: Candidate, topic: str, focus: str = "auto", extra
         candidate.rating = "maybe"
     else:
         candidate.rating = "weak"
+    candidate.relevance_tier = relevance_tier(candidate, topic)
+    if required_terms and not has_required_intent and candidate.relevance_tier == "core_related":
+        reasons.append("broader core-related context")
     candidate.reason = ", ".join(reasons) or "low signal"
 
 
@@ -601,6 +630,7 @@ def rank_for_final(candidates: list[Candidate]) -> list[Candidate]:
         candidates,
         key=lambda item: (
             1 if "mp.weixin.qq.com" in item.resolved_url else 0,
+            RELEVANCE_TIER_PRIORITY.get(item.relevance_tier, 0),
             item.score,
             item.date,
         ),
@@ -629,7 +659,7 @@ def select_final_candidates(
         if "mp.weixin.qq.com" in candidate.resolved_url
         and RATING_LEVELS.get(candidate.rating, 0) >= min_level
         and candidate_matches_core_topic(candidate, topic)
-        and candidate_matches_required_intent(candidate, topic)
+        and RELEVANCE_TIER_PRIORITY.get(candidate.relevance_tier, 0) >= RELEVANCE_TIER_PRIORITY["core_related"]
     ]
     return rank_for_final(resolved)[:count]
 
@@ -1030,6 +1060,7 @@ def write_outputs(
     pool_csv_path = output_dir / f"{base}-screened-pool.csv" if pool_candidates is not None else None
 
     fields = [
+        "relevance_tier",
         "rating",
         "score",
         "title",
@@ -1051,8 +1082,8 @@ def write_outputs(
     with md_path.open("w", encoding="utf-8-sig") as handle:
         handle.write(f"# WeChat article candidates: {topic}\n\n")
         handle.write(f"Generated at: {dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-        handle.write("| # | Rating | Score | Title | Account | Date | Status | Reason | URL |\n")
-        handle.write("|---:|---|---:|---|---|---|---|---|---|\n")
+        handle.write("| # | Tier | Rating | Score | Title | Account | Date | Status | Reason | URL |\n")
+        handle.write("|---:|---|---|---:|---|---|---|---|---|---|\n")
         for index, candidate in enumerate(candidates, start=1):
             url = candidate.resolved_url or candidate.sogou_url
             title = markdown_cell(candidate.title)
@@ -1060,7 +1091,7 @@ def write_outputs(
             status = markdown_cell(candidate.resolve_status)
             reason = markdown_cell(candidate.reason)
             handle.write(
-                f"| {index} | {candidate.rating} | {candidate.score} | "
+                f"| {index} | {candidate.relevance_tier} | {candidate.rating} | {candidate.score} | "
                 f"[{title}]({url}) | {source} | {candidate.date} | {status} | {reason} | "
                 f"[link]({url}) |\n"
             )
@@ -1181,16 +1212,14 @@ def main(argv: list[str]) -> int:
 
     intent_terms = required_intent_terms(args.topic)
     if intent_terms:
-        before_intent_filter = len(candidates)
         intent_candidates = [
             candidate for candidate in candidates if candidate_matches_required_intent(candidate, args.topic)
         ]
-        if intent_candidates:
-            candidates = intent_candidates
-            print(
-                "Required intent filter "
-                f"({', '.join(intent_terms)}) kept {len(candidates)} of {before_intent_filter} candidates."
-            )
+        print(
+            "Required intent signal "
+            f"({', '.join(intent_terms)}) matched {len(intent_candidates)} of {len(candidates)} candidates; "
+            "keeping broader core-related candidates for recall."
+        )
 
     screening_pool = select_screening_pool(candidates, args.count, pool_size)
     print(f"Screening pool: {len(screening_pool)} candidates for {args.count} final URLs.")

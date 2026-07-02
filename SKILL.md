@@ -15,7 +15,7 @@ For a portable prompt that can be pasted into Claude, ChatGPT, DeepSeek, or anot
 
 Do not assume keyword matches equal relevance. A good article may have a weak title but a strong abstract, credible account, or useful article body. A bad article may have a perfect title but be a notice, listicle, old recap, repost, or low-value news item.
 
-Prioritize fit to the user's intent over generic popularity.
+Prioritize fit to the user's intent over generic popularity. Relevance is graded, not binary: a useful background or adjacent case may be worth keeping when exact articles are sparse.
 
 ## Automatic Mode Handoff
 
@@ -33,7 +33,7 @@ Use these rules:
 - Add `-Focus marketing` only when the user clearly wants marketing, advertising, brand, sponsorship, campaign, media, or consumer insight articles. Otherwise omit it and let automatic mode use `general`.
 - Add `-ExtraKeywords` only for important disambiguation terms, required entities, or exclusions that would be awkward to pack into the topic.
 - Add `-OnlyUrls` only when the user wants to stop after generating `urls.txt` and not run MinerU.
-- If there are not enough accurate articles, return fewer rather than padding with weak matches.
+- Use graded relevance. Prefer exact matches first, then articles that are useful for writing a report on the topic. If exact matches are sparse, include clearly useful core-related context instead of returning an unnecessarily tiny list.
 
 After asking clarifying questions, either run the command or show the exact command the user should run. Keep the command simple; do not expose low-level research parameters unless the user asks.
 
@@ -102,6 +102,7 @@ Maybe:
 - Related but narrow, short, old, or only partially aligned.
 - Good source but weak title or thin abstract.
 - Strong title but unclear article depth.
+- Core-related context that would help the user write a report, even if it does not contain every intent word from the query.
 
 Weak or reject:
 
