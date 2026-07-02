@@ -80,6 +80,20 @@ powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 
 powershell -ExecutionPolicy Bypass -File .\run_retry_failed.ps1
 ```
 
+## 常见提示
+
+如果看到：
+
+```text
+daily web crawl limit reached max: 100 tasks, submit tomorrow
+```
+
+意思是 MinerU 当天网页抓取额度已经用完了，不是程序坏了。第二天额度恢复后，重新运行即可：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run_manual.ps1
+```
+
 如果只想继续某一步，也可以用自动模式的阶段参数：
 
 ```powershell
