@@ -32,7 +32,11 @@ $env:MINERU_TOKEN="你的 MinerU Token"
 
 ## AI 用户
 
-适合你把这个仓库链接发给 Codex、Claude、ChatGPT、DeepSeek 等 AI，让 AI 在你的电脑上帮你跑。
+适合你把这个仓库链接发给 Codex、Claude、ChatGPT、DeepSeek 等 AI，让 AI 在你的电脑上帮你跑：
+
+```text
+https://github.com/MikeWang330/wechat-article-screening
+```
 
 ### AI 用户：本地研究记忆
 
@@ -41,7 +45,8 @@ $env:MINERU_TOKEN="你的 MinerU Token"
 可以这样说：
 
 ```text
-请先根据我的回答，帮我建立本地 research_memory.json。
+请使用这个仓库：https://github.com/MikeWang330/wechat-article-screening
+先根据我的回答，帮我建立本地 research_memory.json。
 以后类似任务默认用于商业分析；优先要案例复盘、行业分析、数据报告；
 过滤招聘、课程、资料包和普通新闻快讯；找不满时宁可少给，不要硬凑。
 ```
@@ -50,25 +55,18 @@ $env:MINERU_TOKEN="你的 MinerU Token"
 
 ### AI 用户：自动模式
 
-你只需要把需求告诉 AI。第一次用时，不需要一次说得很完美，AI 应该先帮你问清楚。
+建好本地研究记忆后，你只需要把新需求告诉 AI。
 
 可以这样说：
 
 ```text
-请使用这个仓库的 SKILL.md，帮我在本地运行自动模式。
+请使用这个仓库：https://github.com/MikeWang330/wechat-article-screening
+帮我在本地运行自动模式。
 我的需求是：2025年至今，找 20 篇 AI 硬件品牌营销案例相关的微信公众号文章。
 我已经准备好了 MinerU Token。
 ```
 
-第一次使用时，AI 通常会先问这些问题里的几项：
-
-- 这次研究最后是用来写报告、做案例库，还是只想快速找资料？
-- 你更想要案例复盘、行业分析、数据报告、采访、官方信息，还是都可以？
-- 时间范围是否严格？如果符合主题但稍早一点，要不要保留？
-- 哪些内容不要？比如招聘、课程、资料包、新闻快讯、低质量转载。
-- 找不满数量时，是宁可少给高质量结果，还是允许放宽到背景文章？
-
-之后再用时，你只要说新的主题和数量即可。除非你主动改要求，AI 和程序都会沿用这份本地筛选习惯。
+之后再用时，你只要说新的主题和数量即可。除非你主动改要求，AI 和程序都会沿用本地筛选习惯。
 
 自动模式默认规则：
 
