@@ -35,7 +35,7 @@ $env:MINERU_TOKEN="你的 MinerU Token"
 适合你把这个仓库链接发给 Codex、Claude、ChatGPT、DeepSeek 等 AI，让 AI 在你的电脑上帮你跑：
 
 ```text
-https://github.com/MikeWang330/wechat-article-screening
+https://github.com/MikeWang330/wechat-article-screening，这是我的" MinerU Token"
 ```
 
 ### AI 用户：本地研究记忆
