@@ -1,4 +1,4 @@
 interface:
   display_name: "WeChat Article Screening"
-  short_description: "Question-led screening workflow for WeChat article research."
-  default_prompt: "Use this skill to clarify a WeChat research need, score candidates, and select final mp.weixin.qq.com URLs."
+  short_description: "Clarify research intent, learn screening preferences, and find WeChat article URLs."
+  default_prompt: "Use this skill to help me clarify my WeChat article research need, remember my screening preferences when possible, then find and prepare final mp.weixin.qq.com URLs."

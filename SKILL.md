@@ -5,7 +5,7 @@ description: Question-led workflow for finding, screening, and selecting WeChat 
 
 # WeChat Article Screening
 
-Use this skill to help a user find useful WeChat public-account articles, especially when the topic is broad or ambiguous. Work by asking the fewest useful questions, then turn the user's need into the project's automatic mode whenever the project scripts are available.
+Use this skill to help a user find useful WeChat public-account articles, especially when the topic is broad or ambiguous. Work like a research partner: clarify the user's actual job-to-be-done, remember stable screening preferences when memory is available, then turn the user's need into the project's automatic mode whenever the project scripts are available.
 
 The preferred handoff is `run_auto.ps1`, which searches, screens, resolves real WeChat article links, writes `urls.txt`, and then runs MinerU. Only produce a manual `urls.txt` workflow when the user already provides article URLs or explicitly asks not to use automatic mode.
 
@@ -43,15 +43,29 @@ After asking clarifying questions, either run the command or show the exact comm
 
 ## Ask First
 
-Ask only questions that materially change the result. Prefer 1 to 3 questions, and continue with defaults if the user does not know. If topic, count, and time range are already inferable, do not ask; proceed to automatic mode.
+On a user's first run, ask a slightly richer but still lightweight intake. The goal is to learn the user's research pattern, not to make them operate the tool. Prefer 3 to 5 short questions when preferences are unknown. On later runs, reuse known preferences and ask only when the new request conflicts with them or is genuinely ambiguous.
+
+If memory is available, remember stable preferences after the first successful clarification, such as:
+
+- Business purpose: report writing, case library, quick scan, competitor tracking, or deep research.
+- Preferred article types: case studies, deep analysis, data reports, interviews, official announcements, practical guides.
+- Default quality bar: strict high-quality only, balanced, or broad background allowed.
+- Default exclusions: recruitment, courses, download bait, simple news recaps, low-value reposts.
+- Sparse-result behavior: accept fewer high-quality articles or allow core-related background articles.
+- Default mode preference: `fast` for previews or `slow` for serious analysis.
+
+Do not store one-off topics, private tokens, or sensitive project details as memory. If persistent memory is not available, summarize the learned pattern in the conversation and apply it for the rest of the thread.
+
+Ask only questions that materially change the result. If topic, count, time range, and user pattern are already inferable, do not ask; proceed to automatic mode.
 
 Question pool:
 
-1. What is the exact research topic?
-2. What time range should be included?
+1. What is the research topic and business purpose?
+2. What time range should be included, and is it strict?
 3. How many final articles are needed?
 4. What does a good article look like for this task?
 5. What should be excluded?
+6. If exact matches are sparse, should the result include core-related background articles or return fewer articles?
 
 Useful optional questions:
 
