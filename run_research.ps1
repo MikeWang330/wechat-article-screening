@@ -13,6 +13,9 @@ param(
     [ValidateSet("auto", "general", "marketing")]
     [string]$Focus = "auto",
 
+    [ValidateSet("weak", "maybe", "strong")]
+    [string]$MinRating = "maybe",
+
     [string]$StartDate = "",
 
     [string]$EndDate = ""
@@ -48,6 +51,9 @@ if ($ExtraKeywords) {
 }
 if ($Focus) {
     $arguments += @("--focus", $Focus)
+}
+if ($MinRating) {
+    $arguments += @("--min-rating", $MinRating)
 }
 if ($StartDate) {
     $arguments += @("--start-date", $StartDate)

@@ -533,8 +533,17 @@ def select_screening_pool(candidates: list[Candidate], count: int, pool_size: in
     return rank_for_screening(candidates)[:target_pool_size]
 
 
-def select_final_candidates(candidates: list[Candidate], count: int) -> list[Candidate]:
-    resolved = [candidate for candidate in candidates if "mp.weixin.qq.com" in candidate.resolved_url]
+RATING_LEVELS = {"weak": 0, "maybe": 1, "strong": 2}
+
+
+def select_final_candidates(candidates: list[Candidate], count: int, min_rating: str = "maybe") -> list[Candidate]:
+    min_level = RATING_LEVELS.get(min_rating, RATING_LEVELS["maybe"])
+    resolved = [
+        candidate
+        for candidate in candidates
+        if "mp.weixin.qq.com" in candidate.resolved_url
+        and RATING_LEVELS.get(candidate.rating, 0) >= min_level
+    ]
     return rank_for_final(resolved)[:count]
 
 
@@ -1009,6 +1018,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--pool-size", type=int, default=0, help="How many screened candidates to resolve before final selection. Default: count * 2")
     parser.add_argument("--extra-keywords", default="", help="Optional comma/space separated keywords")
     parser.add_argument("--focus", choices=["auto", "general", "marketing"], default="auto", help="Scoring/query preset. Default: auto")
+    parser.add_argument("--min-rating", choices=["weak", "maybe", "strong"], default="maybe", help="Minimum rating for final URLs. Default: maybe")
     parser.add_argument("--start-date", default="", help="Keep articles on or after this date, YYYY-MM-DD")
     parser.add_argument("--end-date", default="", help="Keep articles on or before this date, YYYY-MM-DD")
     parser.add_argument("--max-queries", type=int, default=8, help="How many search phrases to try")
@@ -1083,9 +1093,12 @@ def main(argv: list[str]) -> int:
         screening_pool = dedupe_candidates(screening_pool)
 
     screening_pool = filter_candidates_by_date(screening_pool, start_date, end_date)
-    final_candidates = select_final_candidates(screening_pool, args.count)
+    final_candidates = select_final_candidates(screening_pool, args.count, min_rating=args.min_rating)
     if len(final_candidates) < args.count:
-        print(f"Only {len(final_candidates)} verified WeChat URLs were found for the requested {args.count}.")
+        print(
+            f"Only {len(final_candidates)} verified WeChat URLs with rating >= {args.min_rating} "
+            f"were found for the requested {args.count}."
+        )
     csv_path, md_path, pool_csv_path = write_outputs(
         final_candidates,
         args.topic,

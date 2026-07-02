@@ -9,11 +9,16 @@ param(
     [string]$EndDate = "",
 
     [ValidateSet("auto", "general", "marketing")]
-    [string]$Focus = "auto",
+    [string]$Focus = "general",
+
+    [ValidateSet("weak", "maybe", "strong")]
+    [string]$MinRating = "maybe",
 
     [string]$ExtraKeywords = "",
 
     [int]$PoolSize = 0,
+
+    [int]$RecentDays = 365,
 
     [switch]$OnlyUrls
 )
@@ -21,12 +26,19 @@ param(
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
+if (-not $StartDate -and -not $EndDate -and $RecentDays -gt 0) {
+    $EndDate = (Get-Date).ToString("yyyy-MM-dd")
+    $StartDate = (Get-Date).AddDays(-1 * $RecentDays).ToString("yyyy-MM-dd")
+    Write-Host "No date range provided. Defaulting to the most recent $RecentDays days: $StartDate to $EndDate"
+}
+
 $researchArgs = @(
     "-ExecutionPolicy", "Bypass",
     "-File", ".\run_research.ps1",
     "-Topic", $Topic,
     "-Count", $Count,
-    "-Focus", $Focus
+    "-Focus", $Focus,
+    "-MinRating", $MinRating
 )
 
 if ($StartDate) {

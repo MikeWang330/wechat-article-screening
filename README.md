@@ -2,10 +2,34 @@
 
 这个项目只有两个推荐入口：
 
-- **自动模式**：你给主题和数量，程序自动找公众号文章、筛选、转换真实链接，然后跑 MinerU。
-- **手动模式**：你自己准备 `urls.txt`，程序只负责跑 MinerU。
+- **自动模式**：用户给主题、时间范围和数量，程序自动找公众号文章、筛选、转换真实链接，然后跑 MinerU。
+- **手动模式**：用户自己准备 `urls.txt`，程序只负责跑 MinerU。
 
 因为搜狗跳转链接依赖本机浏览器复核，不建议放到 GitHub Actions 云端跑。别人使用这个项目时，应该克隆到自己的电脑本地运行。运行出来的数据也只保存在本地。
+
+## 先说清楚需求
+
+自动模式的效果很依赖输入质量。建议用户尽量详细，最好使用：
+
+```text
+主题 + 时间范围 + 数量 + 排除/限定条件
+```
+
+例如：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "Alienware 外星人 世界杯 品牌营销" -Count 10 -StartDate "2025-01-01" -EndDate "2026-07-02" -Focus marketing
+```
+
+如果用户没有提供时间范围，自动模式默认只看**最近一年**。可以用 `-RecentDays` 修改：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "AI 硬件产业链" -Count 20 -RecentDays 180
+```
+
+如果主题不够明确，自动模式默认使用 `Focus general`，不会强行套营销逻辑。
+
+筛选原则是：**宁缺毋滥**。如果符合条件的文章不够用户要求的数量，程序会少给，不会用弱相关帖子东拼西凑。
 
 ## 安装
 
@@ -25,7 +49,7 @@ $env:MINERU_TOKEN="你的 MinerU Token"
 
 ## 自动模式
 
-适合：用户只知道主题、关键词和想要多少篇文章。
+适合：用户知道研究主题、时间范围和想要多少篇文章。
 
 程序会自动完成：
 
@@ -37,28 +61,28 @@ $env:MINERU_TOKEN="你的 MinerU Token"
 6. 上传给 MinerU 解析。
 7. 下载结果并收集 Markdown。
 
-运行：
+推荐写法，明确主题和日期：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销" -Count 20
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 品牌案例 赞助商" -Count 20 -StartDate "2025-01-01" -EndDate "2026-07-02" -Focus marketing
 ```
 
-限定时间范围：
+通用研究主题：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销" -Count 20 -StartDate "2025-01-01" -EndDate "2026-07-02"
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "AI 硬件产业链 公司案例" -Count 20 -Focus general
 ```
 
-非营销主题建议使用通用筛选模式：
+只生成 `urls.txt`，暂时不跑 MinerU：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "AI 硬件产业链" -Count 20 -Focus general
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 品牌案例 赞助商" -Count 20 -OnlyUrls
 ```
 
-如果只想自动生成 `urls.txt`，暂时不跑 MinerU：
+只接受更高质量候选：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销" -Count 20 -OnlyUrls
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "AI 硬件产业链 公司案例" -Count 20 -MinRating strong
 ```
 
 ## 手动模式
