@@ -26,6 +26,10 @@ param(
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
+Write-Host "Auto mode tip: give a detailed topic when possible, for example: topic + date range + target type."
+Write-Host "Auto mode defaults: Focus=$Focus, MinRating=$MinRating, RecentDays=$RecentDays."
+Write-Host "Quality rule: if there are not enough accurate articles, the program returns fewer instead of padding weak matches."
+
 if (-not $StartDate -and -not $EndDate -and $RecentDays -gt 0) {
     $EndDate = (Get-Date).ToString("yyyy-MM-dd")
     $StartDate = (Get-Date).AddDays(-1 * $RecentDays).ToString("yyyy-MM-dd")

@@ -1,35 +1,11 @@
 # 微信公众号文章搜索筛选 + MinerU 批量解析
 
-这个项目只有两个推荐入口：
+这个项目只推荐两个入口：
 
-- **自动模式**：用户给主题、时间范围和数量，程序自动找公众号文章、筛选、转换真实链接，然后跑 MinerU。
-- **手动模式**：用户自己准备 `urls.txt`，程序只负责跑 MinerU。
+- **自动模式**：输入主题和数量，程序自动找文章、筛选、转换真实公众号链接，并继续跑 MinerU。
+- **手动模式**：你已经有公众号链接，放进 `urls.txt`，程序只跑 MinerU。
 
-因为搜狗跳转链接依赖本机浏览器复核，不建议放到 GitHub Actions 云端跑。别人使用这个项目时，应该克隆到自己的电脑本地运行。运行出来的数据也只保存在本地。
-
-## 先说清楚需求
-
-自动模式的效果很依赖输入质量。建议用户尽量详细，最好使用：
-
-```text
-主题 + 时间范围 + 数量 + 排除/限定条件
-```
-
-例如：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "Alienware 外星人 世界杯 品牌营销" -Count 10 -StartDate "2025-01-01" -EndDate "2026-07-02" -Focus marketing
-```
-
-如果用户没有提供时间范围，自动模式默认只看**最近一年**。可以用 `-RecentDays` 修改：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "AI 硬件产业链" -Count 20 -RecentDays 180
-```
-
-如果主题不够明确，自动模式默认使用 `Focus general`，不会强行套营销逻辑。
-
-筛选原则是：**宁缺毋滥**。如果符合条件的文章不够用户要求的数量，程序会少给，不会用弱相关帖子东拼西凑。
+搜狗跳转链接依赖本机浏览器复核，所以不建议放到 GitHub Actions 云端运行。请克隆到自己的电脑本地使用。每个人跑出来的数据只保存在自己的本地。
 
 ## 安装
 
@@ -45,49 +21,30 @@ pip install -r requirements.txt
 $env:MINERU_TOKEN="你的 MinerU Token"
 ```
 
-也可以在项目目录下创建 `mineru_token.txt`，把 Token 单独放进去。这个文件已被 `.gitignore` 忽略，不会上传。
+也可以在项目目录下创建 `mineru_token.txt`，把 Token 单独放进去。这个文件不会上传到 GitHub。
 
 ## 自动模式
 
-适合：用户知道研究主题、时间范围和想要多少篇文章。
-
-程序会自动完成：
-
-1. 搜索 Sogou WeChat。
-2. 筛选候选文章。
-3. 用后台浏览器把搜狗跳转链接转换成真实 `mp.weixin.qq.com` 链接。
-4. 写入 `urls.txt`。
-5. 保存微信公众号文章为本地 HTML。
-6. 上传给 MinerU 解析。
-7. 下载结果并收集 Markdown。
-
-推荐写法，明确主题和日期：
+最简单用法：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 品牌案例 赞助商" -Count 20 -StartDate "2025-01-01" -EndDate "2026-07-02" -Focus marketing
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 品牌案例 赞助商" -Count 20
 ```
 
-通用研究主题：
+自动模式会自己处理默认策略：
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "AI 硬件产业链 公司案例" -Count 20 -Focus general
-```
+- 如果没写时间范围，默认看最近一年。
+- 默认使用通用筛选模式，不强行套营销逻辑。
+- 默认只保留质量达到 `maybe` 或 `strong` 的文章。
+- 如果符合要求的文章不够数量，会少给，不会用弱相关内容硬凑。
 
-只生成 `urls.txt`，暂时不跑 MinerU：
+如果只想先生成 `urls.txt`，不跑 MinerU：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 品牌案例 赞助商" -Count 20 -OnlyUrls
 ```
 
-只接受更高质量候选：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "AI 硬件产业链 公司案例" -Count 20 -MinRating strong
-```
-
 ## 手动模式
-
-适合：用户已经自己挑好了公众号文章链接。
 
 先创建 `urls.txt`，每行放一个微信公众号文章链接：
 
@@ -102,7 +59,7 @@ https://mp.weixin.qq.com/s/yyyy
 powershell -ExecutionPolicy Bypass -File .\run_manual.ps1
 ```
 
-## 输出在哪里
+## 输出位置
 
 每次 MinerU 解析都会保存到新的运行目录：
 
@@ -154,7 +111,7 @@ references/universal-prompt.md
 - `SKILL.md`：给 Codex 这类 Skill 系统使用
 - `references/universal-prompt.md`：可以复制给 Claude、ChatGPT、DeepSeek 等 AI 使用
 
-## 不要上传的本地文件
+## 本地数据不会上传
 
 这些文件和目录属于个人运行数据，已经被 `.gitignore` 忽略：
 
@@ -165,5 +122,3 @@ references/universal-prompt.md
 - `outputs/`
 - `work/`
 - `library/articles_index.csv`
-
-别人克隆这个项目后，运行出来的数据会保存在他们自己的本地目录里。
