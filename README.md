@@ -63,6 +63,13 @@ powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 
 powershell -ExecutionPolicy Bypass -File .\run_retry_failed.ps1
 ```
 
+如果只想继续某一步，也可以用自动模式的阶段参数：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Stage mineru
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Stage retry
+```
+
 ## 手动模式
 
 先创建 `urls.txt`，每行放一个微信公众号文章链接：

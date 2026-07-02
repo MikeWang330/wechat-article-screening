@@ -184,6 +184,34 @@ GENERAL_SOURCE_TERMS = [
     "产品",
 ]
 SUBSTANTIVE_SNIPPET_MIN_LENGTH = 40
+PRICE_INTENT_TERMS = [
+    "降价",
+    "涨价",
+    "调价",
+    "价格",
+    "低价",
+    "高价",
+    "促销",
+    "优惠",
+    "折扣",
+]
+TOPIC_INTENT_TERMS = set(
+    VALUE_TERMS
+    + MARKETING_HINT_TERMS
+    + BRAND_CASE_TERMS
+    + PRICE_INTENT_TERMS
+    + [
+        "新闻",
+        "文章",
+        "公众号",
+        "微信",
+        "相关",
+        "最新",
+        "今年",
+        "去年",
+        "至今",
+    ]
+)
 
 
 @dataclasses.dataclass
@@ -296,17 +324,54 @@ def generate_queries(
     return queries
 
 
-def topic_terms(topic: str) -> list[str]:
-    terms = [topic.strip()]
-    terms.extend([x for x in re.split(r"[,，\s]+", topic) if len(x.strip()) >= 2])
+def core_topic_terms(topic: str) -> list[str]:
+    terms: list[str] = []
+
+    compact = normalize_text(topic)
+    stripped_compact = compact
+    for intent_term in sorted(TOPIC_INTENT_TERMS, key=len, reverse=True):
+        stripped_compact = stripped_compact.replace(normalize_text(intent_term), "")
+    if len(stripped_compact) >= 2 and not stripped_compact.isdigit():
+        terms.append(stripped_compact)
+
+    for raw_term in re.split(r"[,，\s]+", topic):
+        term = raw_term.strip()
+        if len(term) < 2 or term.isdigit():
+            continue
+        compact_term = normalize_text(term)
+        for intent_term in sorted(TOPIC_INTENT_TERMS, key=len, reverse=True):
+            compact_term = compact_term.replace(normalize_text(intent_term), "")
+        if len(compact_term) >= 2 and not compact_term.isdigit():
+            terms.append(compact_term)
+
     seen: set[str] = set()
     clean_terms: list[str] = []
     for term in terms:
-        term = term.strip()
         if term and term not in seen:
             clean_terms.append(term)
             seen.add(term)
     return clean_terms
+
+
+def candidate_matches_core_topic(candidate: Candidate, topic: str) -> bool:
+    core_terms = core_topic_terms(topic)
+    if not core_terms:
+        return True
+    blob = normalize_text(f"{candidate.title} {candidate.snippet}")
+    return any(term in blob for term in core_terms)
+
+
+def required_intent_terms(topic: str) -> list[str]:
+    blob = normalize_text(topic)
+    return [term for term in PRICE_INTENT_TERMS if normalize_text(term) in blob]
+
+
+def candidate_matches_required_intent(candidate: Candidate, topic: str) -> bool:
+    required_terms = required_intent_terms(topic)
+    if not required_terms:
+        return True
+    blob = normalize_text(f"{candidate.title} {candidate.snippet}")
+    return any(normalize_text(term) in blob for term in required_terms)
 
 
 def score_candidate(candidate: Candidate, topic: str, focus: str = "auto", extra_keywords: str = "") -> None:
@@ -318,13 +383,22 @@ def score_candidate(candidate: Candidate, topic: str, focus: str = "auto", extra
     resolved_focus = resolve_focus(topic, extra_keywords, focus)
     reasons: list[str] = []
     score = 0
+    core_terms = core_topic_terms(topic)
+    has_core_match = any(term in compact_blob for term in core_terms)
+    required_terms = required_intent_terms(topic)
+    has_required_intent = not required_terms or any(
+        normalize_text(term) in compact_blob for term in required_terms
+    )
 
     if compact_topic and compact_topic in compact_blob:
         score += 4
         reasons.append("direct topic match")
-    elif any(term and term in title_blob for term in topic_terms(topic)):
+    elif has_core_match:
         score += 2
-        reasons.append("partial topic match")
+        reasons.append("core topic match")
+    if required_terms and has_required_intent:
+        score += 1
+        reasons.append("required intent match")
 
     if any(term in candidate.title for term in VALUE_TERMS):
         score += 3
@@ -354,6 +428,12 @@ def score_candidate(candidate: Candidate, topic: str, focus: str = "auto", extra
     if any(term in candidate.title for term in LOW_VALUE_TERMS):
         score -= 4
         reasons.append("low-value format")
+    if core_terms and not has_core_match and compact_topic not in compact_blob:
+        score -= 4
+        reasons.append("missing core topic")
+    if not has_required_intent:
+        score -= 4
+        reasons.append("missing required intent")
 
     candidate.score = score
     if score >= 8:
@@ -536,13 +616,20 @@ def select_screening_pool(candidates: list[Candidate], count: int, pool_size: in
 RATING_LEVELS = {"weak": 0, "maybe": 1, "strong": 2}
 
 
-def select_final_candidates(candidates: list[Candidate], count: int, min_rating: str = "maybe") -> list[Candidate]:
+def select_final_candidates(
+    candidates: list[Candidate],
+    count: int,
+    min_rating: str = "maybe",
+    topic: str = "",
+) -> list[Candidate]:
     min_level = RATING_LEVELS.get(min_rating, RATING_LEVELS["maybe"])
     resolved = [
         candidate
         for candidate in candidates
         if "mp.weixin.qq.com" in candidate.resolved_url
         and RATING_LEVELS.get(candidate.rating, 0) >= min_level
+        and candidate_matches_core_topic(candidate, topic)
+        and candidate_matches_required_intent(candidate, topic)
     ]
     return rank_for_final(resolved)[:count]
 
@@ -1016,7 +1103,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Search and verify WeChat article URLs.")
     parser.add_argument("--topic", required=True, help="Research topic, for example: AI hardware marketing")
     parser.add_argument("--count", type=int, default=20, help="Number of final candidates to keep")
-    parser.add_argument("--pool-size", type=int, default=0, help="How many screened candidates to resolve before final selection. Default: count * 2")
+    parser.add_argument("--pool-size", type=int, default=0, help="How many screened candidates to resolve before final selection. Default: about count * 1.5")
     parser.add_argument("--extra-keywords", default="", help="Optional comma/space separated keywords")
     parser.add_argument("--focus", choices=["auto", "general", "marketing"], default="auto", help="Scoring/query preset. Default: auto")
     parser.add_argument("--min-rating", choices=["weak", "maybe", "strong"], default="maybe", help="Minimum rating for final URLs. Default: maybe")
@@ -1029,17 +1116,20 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--urls-file", type=Path, default=DEFAULT_URLS_FILE)
     parser.add_argument("--no-browser", action="store_true", help="Skip hidden browser verification")
     parser.add_argument("--chrome-path", default=None, help="Optional Chrome or Edge executable path")
-    parser.add_argument("--min-delay", type=float, default=2.0, help="Minimum random delay in seconds")
-    parser.add_argument("--max-delay", type=float, default=6.0, help="Maximum random delay in seconds")
+    parser.add_argument("--min-delay", type=float, default=1.0, help="Minimum random delay in seconds")
+    parser.add_argument("--max-delay", type=float, default=3.0, help="Maximum random delay in seconds")
     parser.add_argument("--timeout", type=int, default=15, help="Search request timeout in seconds")
     return parser.parse_args(argv)
 
 
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
+    if args.count <= 0:
+        print("Invalid count: --count must be greater than 0")
+        return 2
     if args.max_delay < args.min_delay:
         args.max_delay = args.min_delay
-    pool_size = args.pool_size if args.pool_size > 0 else args.count * 2
+    pool_size = args.pool_size if args.pool_size > 0 else args.count + max(4, args.count // 2)
     try:
         start_date = parse_date_arg(args.start_date, "--start-date")
         end_date = parse_date_arg(args.end_date, "--end-date")
@@ -1078,6 +1168,30 @@ def main(argv: list[str]) -> int:
     if start_date or end_date:
         print(f"Date filter kept {len(candidates)} of {before_date_filter} candidates.")
 
+    core_terms = core_topic_terms(args.topic)
+    if core_terms:
+        before_core_filter = len(candidates)
+        core_candidates = [candidate for candidate in candidates if candidate_matches_core_topic(candidate, args.topic)]
+        if core_candidates:
+            candidates = core_candidates
+            print(
+                "Core topic filter "
+                f"({', '.join(core_terms)}) kept {len(candidates)} of {before_core_filter} candidates."
+            )
+
+    intent_terms = required_intent_terms(args.topic)
+    if intent_terms:
+        before_intent_filter = len(candidates)
+        intent_candidates = [
+            candidate for candidate in candidates if candidate_matches_required_intent(candidate, args.topic)
+        ]
+        if intent_candidates:
+            candidates = intent_candidates
+            print(
+                "Required intent filter "
+                f"({', '.join(intent_terms)}) kept {len(candidates)} of {before_intent_filter} candidates."
+            )
+
     screening_pool = select_screening_pool(candidates, args.count, pool_size)
     print(f"Screening pool: {len(screening_pool)} candidates for {args.count} final URLs.")
 
@@ -1094,7 +1208,12 @@ def main(argv: list[str]) -> int:
         screening_pool = dedupe_candidates(screening_pool)
 
     screening_pool = filter_candidates_by_date(screening_pool, start_date, end_date)
-    final_candidates = select_final_candidates(screening_pool, args.count, min_rating=args.min_rating)
+    final_candidates = select_final_candidates(
+        screening_pool,
+        args.count,
+        min_rating=args.min_rating,
+        topic=args.topic,
+    )
     if len(final_candidates) < args.count:
         print(
             f"Only {len(final_candidates)} verified WeChat URLs with rating >= {args.min_rating} "

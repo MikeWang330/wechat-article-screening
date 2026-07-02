@@ -25,21 +25,27 @@ $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
 $pythonCandidates = @(
-    "C:\Users\YQSL\AppData\Local\Python\bin\python.exe",
+    "$env:LOCALAPPDATA\Python\bin\python.exe",
+    "$env:LOCALAPPDATA\Python\pythoncore-3.14-64\python.exe",
+    "python",
     "py"
 )
 
 $python = $null
 foreach ($candidate in $pythonCandidates) {
-    $command = Get-Command $candidate -ErrorAction SilentlyContinue
-    if ($command) {
+    try {
+        $command = Get-Command $candidate -ErrorAction Stop
+        if ($command.Source -like "*Microsoft\WindowsApps\python.exe") {
+            continue
+        }
         $python = $candidate
         break
+    } catch {
     }
 }
 
 if (-not $python) {
-    throw "Could not find Python. Please install Python or keep using the existing Python launcher."
+    throw "No usable Python was found. Please install Python or add it to PATH."
 }
 
 $arguments = @("wechat_research.py", "--topic", $Topic, "--count", $Count)
@@ -66,3 +72,4 @@ if (-not $NoWriteUrls) {
 }
 
 & $python @arguments
+exit $LASTEXITCODE

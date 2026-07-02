@@ -46,6 +46,9 @@ if ($EndDate) {
 
 Write-Host "Step 1/2: searching, screening, and resolving WeChat URLs..."
 & powershell @researchArgs
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
 
 if ($SkipMinerU) {
     Write-Host "SkipMinerU is set. urls.txt is ready."
@@ -54,3 +57,4 @@ if ($SkipMinerU) {
 
 Write-Host "Step 2/2: parsing urls.txt with MinerU..."
 & powershell -ExecutionPolicy Bypass -File ".\run_mineru_html_file.ps1"
+exit $LASTEXITCODE

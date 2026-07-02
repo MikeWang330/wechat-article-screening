@@ -1,4 +1,5 @@
 $ErrorActionPreference = "Stop"
+Set-Location $PSScriptRoot
 
 $pythonCandidates = @(
     "$env:LOCALAPPDATA\Python\bin\python.exe",
@@ -25,3 +26,4 @@ if (-not $python) {
 }
 
 & $python mineru_batch_wechat.py --urls urls.txt --html-only
+exit $LASTEXITCODE

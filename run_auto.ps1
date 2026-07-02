@@ -48,6 +48,10 @@ if (-not $Topic) {
     throw "Topic is required when Stage is all or search."
 }
 
+if ($Count -le 0) {
+    throw "Count must be greater than 0."
+}
+
 if (-not $StartDate -and -not $EndDate -and $RecentDays -gt 0) {
     $EndDate = (Get-Date).ToString("yyyy-MM-dd")
     $StartDate = (Get-Date).AddDays(-1 * $RecentDays).ToString("yyyy-MM-dd")
@@ -89,3 +93,4 @@ if ($OnlyUrls -or $Stage -eq "search") {
 
 Write-Host "Auto mode 2/2: parsing urls.txt with MinerU..."
 & powershell -ExecutionPolicy Bypass -File ".\run_manual.ps1"
+exit $LASTEXITCODE

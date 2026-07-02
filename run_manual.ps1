@@ -12,3 +12,4 @@ if ($urlCount -eq 0) {
 
 Write-Host "Manual mode: parsing $urlCount URLs from urls.txt with MinerU..."
 & powershell -ExecutionPolicy Bypass -File ".\run_mineru_html_file.ps1"
+exit $LASTEXITCODE

@@ -4,6 +4,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+Set-Location $PSScriptRoot
 
 $pythonCandidates = @(
     "$env:LOCALAPPDATA\Python\bin\python.exe",
@@ -35,3 +36,4 @@ if ($OutputDir) {
 }
 
 & $python @arguments
+exit $LASTEXITCODE

@@ -38,3 +38,4 @@ Write-Host "Failed URLs: $FailedUrls"
 Write-Host "Retry output: $OutputDir"
 
 & powershell -ExecutionPolicy Bypass -File ".\run_mineru_html_file.ps1" -Urls $FailedUrls -OutputDir $OutputDir
+exit $LASTEXITCODE
