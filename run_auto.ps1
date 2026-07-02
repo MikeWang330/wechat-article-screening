@@ -1,6 +1,8 @@
 param(
     [string]$Topic = "",
 
+    [string]$ParamsFile = "",
+
     [int]$Count = 20,
 
     [string]$StartDate = "",
@@ -33,6 +35,51 @@ param(
 
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
+$boundParameters = @{} + $PSBoundParameters
+
+try {
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    $OutputEncoding = [System.Text.Encoding]::UTF8
+    $env:PYTHONIOENCODING = "utf-8"
+} catch {
+}
+
+function Get-JsonValue {
+    param(
+        [object]$Object,
+        [string]$Name
+    )
+
+    $property = $Object.PSObject.Properties[$Name]
+    if (-not $property) {
+        return $null
+    }
+    if ($property.Value -is [string] -and $property.Value -eq "") {
+        return $null
+    }
+    return $property.Value
+}
+
+if ($ParamsFile) {
+    if (-not (Test-Path -LiteralPath $ParamsFile)) {
+        throw "ParamsFile was not found: $ParamsFile"
+    }
+    $paramsData = Get-Content -LiteralPath $ParamsFile -Raw -Encoding UTF8 | ConvertFrom-Json
+    $value = Get-JsonValue $paramsData "topic"; if ($null -ne $value) { $Topic = [string]$value; $boundParameters["Topic"] = $true }
+    $value = Get-JsonValue $paramsData "count"; if ($null -ne $value) { $Count = [int]$value; $boundParameters["Count"] = $true }
+    $value = Get-JsonValue $paramsData "start_date"; if ($null -ne $value) { $StartDate = [string]$value; $boundParameters["StartDate"] = $true }
+    $value = Get-JsonValue $paramsData "end_date"; if ($null -ne $value) { $EndDate = [string]$value; $boundParameters["EndDate"] = $true }
+    $value = Get-JsonValue $paramsData "min_rating"; if ($value -in @("weak", "maybe", "strong")) { $MinRating = [string]$value; $boundParameters["MinRating"] = $true }
+    $value = Get-JsonValue $paramsData "extra_keywords"; if ($null -ne $value) { $ExtraKeywords = [string]$value; $boundParameters["ExtraKeywords"] = $true }
+    $value = Get-JsonValue $paramsData "pool_size"; if ($null -ne $value) { $PoolSize = [int]$value; $boundParameters["PoolSize"] = $true }
+    $value = Get-JsonValue $paramsData "mode"; if ($value -in @("fast", "slow")) { $Mode = [string]$value; $boundParameters["Mode"] = $true }
+    $value = Get-JsonValue $paramsData "recent_days"; if ($null -ne $value) { $RecentDays = [int]$value; $boundParameters["RecentDays"] = $true }
+    $value = Get-JsonValue $paramsData "exclude_keywords"; if ($null -ne $value) { $ExcludeKeywords = [string]$value; $boundParameters["ExcludeKeywords"] = $true }
+    $value = Get-JsonValue $paramsData "memory_file"; if ($null -ne $value) { $MemoryFile = [string]$value; $boundParameters["MemoryFile"] = $true }
+    $value = Get-JsonValue $paramsData "no_memory"; if ($null -ne $value) { $NoMemory = [bool]$value; $boundParameters["NoMemory"] = $true }
+    $value = Get-JsonValue $paramsData "stage"; if ($value -in @("all", "search", "mineru", "retry")) { $Stage = [string]$value; $boundParameters["Stage"] = $true }
+    $value = Get-JsonValue $paramsData "only_urls"; if ($null -ne $value) { $OnlyUrls = [bool]$value; $boundParameters["OnlyUrls"] = $true }
+}
 
 function Join-Terms {
     param([object[]]$Values)
@@ -54,7 +101,8 @@ function Join-Terms {
             if ($null -eq $item) {
                 continue
             }
-            foreach ($part in ($item.ToString() -split "[,，;；]")) {
+            $normalizedItem = $item.ToString().Replace([char]0xFF0C, ",").Replace([char]0xFF1B, ";")
+            foreach ($part in ($normalizedItem -split "[,;]")) {
                 $term = $part.Trim()
                 if ($term -and -not $seen.ContainsKey($term)) {
                     $seen[$term] = $true
@@ -88,13 +136,13 @@ if (-not $NoMemory -and $MemoryFile -and (Test-Path -LiteralPath $MemoryFile)) {
         $memory = Get-Content -LiteralPath $MemoryFile -Raw -Encoding UTF8 | ConvertFrom-Json
         Write-Host "Loaded local research memory: $MemoryFile"
 
-        if (-not $PSBoundParameters.ContainsKey("Mode") -and $memory.default_mode -in @("fast", "slow")) {
+        if (-not $boundParameters.ContainsKey("Mode") -and $memory.default_mode -in @("fast", "slow")) {
             $Mode = $memory.default_mode
         }
-        if (-not $PSBoundParameters.ContainsKey("MinRating") -and $memory.default_min_rating -in @("weak", "maybe", "strong")) {
+        if (-not $boundParameters.ContainsKey("MinRating") -and $memory.default_min_rating -in @("weak", "maybe", "strong")) {
             $MinRating = $memory.default_min_rating
         }
-        if (-not $PSBoundParameters.ContainsKey("RecentDays") -and $memory.default_recent_days) {
+        if (-not $boundParameters.ContainsKey("RecentDays") -and $memory.default_recent_days) {
             $RecentDays = [int]$memory.default_recent_days
         }
 

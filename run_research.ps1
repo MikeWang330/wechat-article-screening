@@ -27,21 +27,44 @@ param(
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
+try {
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    $OutputEncoding = [System.Text.Encoding]::UTF8
+    $env:PYTHONIOENCODING = "utf-8"
+} catch {
+}
+
+function Get-JsonValue {
+    param(
+        [object]$Object,
+        [string]$Name
+    )
+
+    $property = $Object.PSObject.Properties[$Name]
+    if (-not $property) {
+        return $null
+    }
+    if ($property.Value -is [string] -and $property.Value -eq "") {
+        return $null
+    }
+    return $property.Value
+}
+
 if ($ParamsFile) {
     if (-not (Test-Path -LiteralPath $ParamsFile)) {
         throw "ParamsFile was not found: $ParamsFile"
     }
     $paramsData = Get-Content -LiteralPath $ParamsFile -Raw -Encoding UTF8 | ConvertFrom-Json
-    if ($paramsData.topic) { $Topic = [string]$paramsData.topic }
-    if ($paramsData.count) { $Count = [int]$paramsData.count }
-    if ($paramsData.pool_size) { $PoolSize = [int]$paramsData.pool_size }
-    if ($paramsData.mode -in @("fast", "slow")) { $Mode = [string]$paramsData.mode }
-    if ($paramsData.extra_keywords) { $ExtraKeywords = [string]$paramsData.extra_keywords }
-    if ($paramsData.exclude_keywords) { $ExcludeKeywords = [string]$paramsData.exclude_keywords }
-    if ($paramsData.min_rating -in @("weak", "maybe", "strong")) { $MinRating = [string]$paramsData.min_rating }
-    if ($paramsData.start_date) { $StartDate = [string]$paramsData.start_date }
-    if ($paramsData.end_date) { $EndDate = [string]$paramsData.end_date }
-    if ($null -ne $paramsData.write_urls) { $NoWriteUrls = -not [bool]$paramsData.write_urls }
+    $value = Get-JsonValue $paramsData "topic"; if ($null -ne $value) { $Topic = [string]$value }
+    $value = Get-JsonValue $paramsData "count"; if ($null -ne $value) { $Count = [int]$value }
+    $value = Get-JsonValue $paramsData "pool_size"; if ($null -ne $value) { $PoolSize = [int]$value }
+    $value = Get-JsonValue $paramsData "mode"; if ($value -in @("fast", "slow")) { $Mode = [string]$value }
+    $value = Get-JsonValue $paramsData "extra_keywords"; if ($null -ne $value) { $ExtraKeywords = [string]$value }
+    $value = Get-JsonValue $paramsData "exclude_keywords"; if ($null -ne $value) { $ExcludeKeywords = [string]$value }
+    $value = Get-JsonValue $paramsData "min_rating"; if ($value -in @("weak", "maybe", "strong")) { $MinRating = [string]$value }
+    $value = Get-JsonValue $paramsData "start_date"; if ($null -ne $value) { $StartDate = [string]$value }
+    $value = Get-JsonValue $paramsData "end_date"; if ($null -ne $value) { $EndDate = [string]$value }
+    $value = Get-JsonValue $paramsData "write_urls"; if ($null -ne $value) { $NoWriteUrls = -not [bool]$value }
 }
 
 if (-not $Topic) {
