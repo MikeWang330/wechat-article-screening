@@ -241,7 +241,7 @@ def read_urls(path: Path) -> List[str]:
     urls = []
     seen = set()
     for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
+        line = raw_line.strip().lstrip("\ufeff")
         if not line or line.startswith("#"):
             continue
         if line in seen:
