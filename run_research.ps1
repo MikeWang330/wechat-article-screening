@@ -6,6 +6,9 @@ param(
 
     [int]$PoolSize = 0,
 
+    [ValidateSet("fast", "slow")]
+    [string]$Mode = "slow",
+
     [switch]$NoWriteUrls,
 
     [string]$ExtraKeywords = "",
@@ -48,7 +51,7 @@ if (-not $python) {
     throw "No usable Python was found. Please install Python or add it to PATH."
 }
 
-$arguments = @("wechat_research.py", "--topic", $Topic, "--count", $Count)
+$arguments = @("wechat_research.py", "--topic", $Topic, "--count", $Count, "--mode", $Mode)
 if ($PoolSize -gt 0) {
     $arguments += @("--pool-size", $PoolSize)
 }

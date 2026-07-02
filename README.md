@@ -61,13 +61,30 @@ powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "AI 硬件 品牌
 powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 品牌案例 赞助商" -Count 20
 ```
 
+自动模式有两种搜索强度：
+
+- `slow`：默认模式。搜索更充分，尽量接近用户要的数量，但仍然有上限，避免跑太久。
+- `fast`：快速模式。只做一轮紧凑搜索，最多复核 `需求数量 × 2` 的候选，适合先快速看结果。
+
+如果想快一点：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 品牌案例 赞助商" -Count 20 -Mode fast
+```
+
+如果想尽量多找一点：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 品牌案例 赞助商" -Count 20 -Mode slow
+```
+
 自动模式会自己处理默认策略：
 
 - 如果没写时间范围，默认看最近一年。
 - 默认使用通用筛选模式，不强行套营销逻辑。
 - 默认只保留质量达到 `maybe` 或 `strong` 的文章。
 - 默认使用分级相关：优先精确命中；如果主题内容较少，会补充核心实体相关、能帮助理解主题的背景文章。
-- 默认只复核不超过 `需求数量 × 2` 的候选文章，不会为了凑满数量反复搜索很多轮。
+- `fast` 最多复核 `需求数量 × 2` 的候选文章，`slow` 最多复核 `需求数量 × 3` 的候选文章。
 - 如果微信公众号文章已删除、不可查看或没有正文，会自动跳过，不会生成无效 Markdown。
 
 如果只想先生成 `urls.txt`，不跑 MinerU：

@@ -17,6 +17,9 @@ param(
 
     [int]$PoolSize = 0,
 
+    [ValidateSet("fast", "slow")]
+    [string]$Mode = "slow",
+
     [int]$RecentDays = 365,
 
     [ValidateSet("all", "search", "mineru", "retry")]
@@ -29,7 +32,7 @@ $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
 Write-Host "Auto mode tip: give a detailed topic when possible, for example: topic + date range + target type."
-Write-Host "Auto mode defaults: Focus=$Focus, MinRating=$MinRating, RecentDays=$RecentDays, Stage=$Stage."
+Write-Host "Auto mode defaults: Focus=$Focus, MinRating=$MinRating, RecentDays=$RecentDays, Stage=$Stage, Mode=$Mode."
 Write-Host "Quality rule: if there are not enough accurate articles, the program returns fewer instead of padding weak matches."
 
 if ($Stage -eq "retry") {
@@ -63,6 +66,7 @@ $researchArgs = @(
     "-File", ".\run_research.ps1",
     "-Topic", $Topic,
     "-Count", $Count,
+    "-Mode", $Mode,
     "-Focus", $Focus,
     "-MinRating", $MinRating
 )

@@ -6,6 +6,9 @@ param(
 
     [int]$PoolSize = 0,
 
+    [ValidateSet("fast", "slow")]
+    [string]$Mode = "slow",
+
     [string]$ExtraKeywords = "",
 
     [ValidateSet("auto", "general", "marketing")]
@@ -25,7 +28,8 @@ $researchArgs = @(
     "-ExecutionPolicy", "Bypass",
     "-File", ".\run_research.ps1",
     "-Topic", $Topic,
-    "-Count", $Count
+    "-Count", $Count,
+    "-Mode", $Mode
 )
 
 if ($PoolSize -gt 0) {

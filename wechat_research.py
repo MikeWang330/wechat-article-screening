@@ -638,8 +638,14 @@ def rank_for_final(candidates: list[Candidate]) -> list[Candidate]:
     )
 
 
-def select_screening_pool(candidates: list[Candidate], count: int, pool_size: int) -> list[Candidate]:
-    max_pool_size = max(count, count * 2)
+def select_screening_pool(
+    candidates: list[Candidate],
+    count: int,
+    pool_size: int,
+    mode: str = "slow",
+) -> list[Candidate]:
+    multiplier = 2 if mode == "fast" else 3
+    max_pool_size = max(count, count * multiplier)
     target_pool_size = min(max(count, pool_size), max_pool_size)
     return rank_for_screening(candidates)[:target_pool_size]
 
@@ -1135,14 +1141,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Search and verify WeChat article URLs.")
     parser.add_argument("--topic", required=True, help="Research topic, for example: AI hardware marketing")
     parser.add_argument("--count", type=int, default=20, help="Number of final candidates to keep")
-    parser.add_argument("--pool-size", type=int, default=0, help="How many screened candidates to resolve before final selection. Capped at count * 2.")
+    parser.add_argument("--mode", choices=["fast", "slow"], default="slow", help="Search effort mode. fast is one bounded pass; slow searches broader. Default: slow")
+    parser.add_argument("--pool-size", type=int, default=0, help="How many screened candidates to resolve before final selection. Capped by mode.")
     parser.add_argument("--extra-keywords", default="", help="Optional comma/space separated keywords")
     parser.add_argument("--focus", choices=["auto", "general", "marketing"], default="auto", help="Scoring/query preset. Default: auto")
     parser.add_argument("--min-rating", choices=["weak", "maybe", "strong"], default="maybe", help="Minimum rating for final URLs. Default: maybe")
     parser.add_argument("--start-date", default="", help="Keep articles on or after this date, YYYY-MM-DD")
     parser.add_argument("--end-date", default="", help="Keep articles on or before this date, YYYY-MM-DD")
-    parser.add_argument("--max-queries", type=int, default=8, help="How many search phrases to try")
-    parser.add_argument("--top-per-query", type=int, default=10, help="How many results to read from each search")
+    parser.add_argument("--max-queries", type=int, default=0, help="How many search phrases to try. Default depends on --mode")
+    parser.add_argument("--top-per-query", type=int, default=0, help="How many results to read from each search. Default depends on --mode")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--write-urls", action="store_true", help="Overwrite urls.txt with verified WeChat URLs")
     parser.add_argument("--urls-file", type=Path, default=DEFAULT_URLS_FILE)
@@ -1161,7 +1168,12 @@ def main(argv: list[str]) -> int:
         return 2
     if args.max_delay < args.min_delay:
         args.max_delay = args.min_delay
-    pool_size = args.pool_size if args.pool_size > 0 else args.count * 2
+    default_max_queries = 8 if args.mode == "fast" else 16
+    default_top_per_query = 10 if args.mode == "fast" else 15
+    max_queries = args.max_queries if args.max_queries > 0 else default_max_queries
+    top_per_query = args.top_per_query if args.top_per_query > 0 else default_top_per_query
+    pool_multiplier = 2 if args.mode == "fast" else 3
+    pool_size = args.pool_size if args.pool_size > 0 else args.count * pool_multiplier
     try:
         start_date = parse_date_arg(args.start_date, "--start-date")
         end_date = parse_date_arg(args.end_date, "--end-date")
@@ -1174,6 +1186,10 @@ def main(argv: list[str]) -> int:
 
     print(f"Topic: {args.topic}")
     print(f"Focus: {resolve_focus(args.topic, args.extra_keywords, args.focus)}")
+    print(
+        f"Mode: {args.mode} "
+        f"(max_queries={max_queries}, top_per_query={top_per_query}, pool_cap={args.count * pool_multiplier})"
+    )
     if start_date or end_date:
         print(
             "Date range: "
@@ -1184,8 +1200,8 @@ def main(argv: list[str]) -> int:
     candidates, sogou_cookies = collect_candidates(
         topic=args.topic,
         extra_keywords=args.extra_keywords,
-        max_queries=args.max_queries,
-        top_per_query=args.top_per_query,
+        max_queries=max_queries,
+        top_per_query=top_per_query,
         timeout=args.timeout,
         min_delay=args.min_delay,
         max_delay=args.max_delay,
@@ -1222,7 +1238,7 @@ def main(argv: list[str]) -> int:
             "keeping broader core-related candidates for recall."
         )
 
-    screening_pool = select_screening_pool(candidates, args.count, pool_size)
+    screening_pool = select_screening_pool(candidates, args.count, pool_size, mode=args.mode)
     print(f"Screening pool: {len(screening_pool)} candidates for {args.count} final URLs.")
 
     if not args.no_browser:

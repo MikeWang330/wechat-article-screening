@@ -27,12 +27,13 @@ After I answer:
    Command rules:
    - Put my actual intent into `-Topic`, including key brands, entities, article type, exclusions, and context when important.
    - Use `-Count` from my requested final number. Default to 20 if unknown.
+   - Choose `-Mode slow` by default. Use `-Mode fast` if I want a quick preview, low runtime, or say not to spend too long. Use `-Mode slow` if I want to get close to the requested count.
    - Add `-StartDate` and `-EndDate` only if I gave an explicit date range. If no date range is given, let the script use its default recent-year window.
    - Add `-Focus marketing` only if I clearly want marketing, advertising, brand, sponsorship, campaign, media, or consumer insight articles. Otherwise omit it and let the script use `general`.
    - Add `-ExtraKeywords` only for important disambiguation terms, required entities, or exclusions that would be awkward to pack into the topic.
    - Add `-OnlyUrls` only if I want to stop after generating `urls.txt` and not run MinerU.
    - Use graded relevance. Prefer exact matches first, then articles that would help me write a report on the topic. If exact matches are sparse, include clearly useful core-related context instead of returning an unnecessarily tiny list.
-   - Keep runtime bounded. Do one automatic search pass with a screening pool no larger than `count * 2`; do not run extra search rounds just to force the final result to exactly match the requested count.
+   - Keep runtime bounded. In `fast` mode, use a screening pool no larger than `count * 2`. In `slow` mode, allow broader search up to about `count * 3`, but do not keep launching manual extra rounds indefinitely just to force an exact count.
 
 2. Build search query groups:
    - Core topic terms.

@@ -29,12 +29,13 @@ Use these rules:
 
 - Put the user's real intent into `-Topic`, including key brands, entities, article type, exclusions, and context when they are important.
 - Use `-Count` from the user's requested final number. Default to 20 if unknown.
+- Choose `-Mode slow` by default. Use `-Mode fast` when the user wants a quick preview, low runtime, or says not to spend too long. Use `-Mode slow` when the user asks to find as many as possible or get close to the requested count.
 - Add `-StartDate` and `-EndDate` only when the user gave an explicit date range. If no date range is given, let `run_auto.ps1` use its default recent-year window.
 - Add `-Focus marketing` only when the user clearly wants marketing, advertising, brand, sponsorship, campaign, media, or consumer insight articles. Otherwise omit it and let automatic mode use `general`.
 - Add `-ExtraKeywords` only for important disambiguation terms, required entities, or exclusions that would be awkward to pack into the topic.
 - Add `-OnlyUrls` only when the user wants to stop after generating `urls.txt` and not run MinerU.
 - Use graded relevance. Prefer exact matches first, then articles that are useful for writing a report on the topic. If exact matches are sparse, include clearly useful core-related context instead of returning an unnecessarily tiny list.
-- Keep runtime bounded. Do one automatic search pass with a screening pool no larger than `count * 2`; do not run extra search rounds just to force the final result to exactly match the requested count.
+- Keep runtime bounded. In `fast` mode, use a screening pool no larger than `count * 2`. In `slow` mode, allow broader search up to about `count * 3`, but do not keep launching manual extra rounds indefinitely just to force an exact count.
 
 After asking clarifying questions, either run the command or show the exact command the user should run. Keep the command simple; do not expose low-level research parameters unless the user asks.
 
@@ -63,7 +64,8 @@ Useful optional questions:
 When the user does not specify:
 
 - Final count: 20 articles.
-- Candidate pool: at most 2x final count.
+- Search mode: `slow`.
+- Candidate pool: up to 2x final count in `fast`, up to about 3x final count in `slow`.
 - Time range: ask once; if still unknown, use the automatic mode default: recent year.
 - Focus: use `general` unless the task clearly needs a field-specific mode.
 - URL type: prefer original `mp.weixin.qq.com` article URLs.
