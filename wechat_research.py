@@ -639,7 +639,8 @@ def rank_for_final(candidates: list[Candidate]) -> list[Candidate]:
 
 
 def select_screening_pool(candidates: list[Candidate], count: int, pool_size: int) -> list[Candidate]:
-    target_pool_size = max(count, pool_size)
+    max_pool_size = max(count, count * 2)
+    target_pool_size = min(max(count, pool_size), max_pool_size)
     return rank_for_screening(candidates)[:target_pool_size]
 
 
@@ -1134,7 +1135,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Search and verify WeChat article URLs.")
     parser.add_argument("--topic", required=True, help="Research topic, for example: AI hardware marketing")
     parser.add_argument("--count", type=int, default=20, help="Number of final candidates to keep")
-    parser.add_argument("--pool-size", type=int, default=0, help="How many screened candidates to resolve before final selection. Default: about count * 1.5")
+    parser.add_argument("--pool-size", type=int, default=0, help="How many screened candidates to resolve before final selection. Capped at count * 2.")
     parser.add_argument("--extra-keywords", default="", help="Optional comma/space separated keywords")
     parser.add_argument("--focus", choices=["auto", "general", "marketing"], default="auto", help="Scoring/query preset. Default: auto")
     parser.add_argument("--min-rating", choices=["weak", "maybe", "strong"], default="maybe", help="Minimum rating for final URLs. Default: maybe")
@@ -1160,7 +1161,7 @@ def main(argv: list[str]) -> int:
         return 2
     if args.max_delay < args.min_delay:
         args.max_delay = args.min_delay
-    pool_size = args.pool_size if args.pool_size > 0 else args.count + max(4, args.count // 2)
+    pool_size = args.pool_size if args.pool_size > 0 else args.count * 2
     try:
         start_date = parse_date_arg(args.start_date, "--start-date")
         end_date = parse_date_arg(args.end_date, "--end-date")

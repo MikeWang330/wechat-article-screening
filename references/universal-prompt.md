@@ -32,6 +32,7 @@ After I answer:
    - Add `-ExtraKeywords` only for important disambiguation terms, required entities, or exclusions that would be awkward to pack into the topic.
    - Add `-OnlyUrls` only if I want to stop after generating `urls.txt` and not run MinerU.
    - Use graded relevance. Prefer exact matches first, then articles that would help me write a report on the topic. If exact matches are sparse, include clearly useful core-related context instead of returning an unnecessarily tiny list.
+   - Keep runtime bounded. Do one automatic search pass with a screening pool no larger than `count * 2`; do not run extra search rounds just to force the final result to exactly match the requested count.
 
 2. Build search query groups:
    - Core topic terms.
@@ -60,6 +61,7 @@ After I answer:
    - Outside the time range.
    - Wrong meaning of an ambiguous topic.
    - Broken, deleted, login-only, blocked, duplicate, or not a WeChat article.
+   - WeChat pages that say the content was deleted, unavailable, or cannot be viewed.
 
 4. Use multiple signals:
    Positive:

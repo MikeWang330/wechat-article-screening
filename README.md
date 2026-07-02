@@ -67,6 +67,8 @@ powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 
 - 默认使用通用筛选模式，不强行套营销逻辑。
 - 默认只保留质量达到 `maybe` 或 `strong` 的文章。
 - 默认使用分级相关：优先精确命中；如果主题内容较少，会补充核心实体相关、能帮助理解主题的背景文章。
+- 默认只复核不超过 `需求数量 × 2` 的候选文章，不会为了凑满数量反复搜索很多轮。
+- 如果微信公众号文章已删除、不可查看或没有正文，会自动跳过，不会生成无效 Markdown。
 
 如果只想先生成 `urls.txt`，不跑 MinerU：
 
@@ -93,6 +95,8 @@ daily web crawl limit reached max: 100 tasks, submit tomorrow
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\run_manual.ps1
 ```
+
+如果某篇微信公众号文章已经被删除、违规不可查看，程序会把它写进 `failed_urls.txt`，不会放进最终 Markdown。
 
 如果只想继续某一步，也可以用自动模式的阶段参数：
 

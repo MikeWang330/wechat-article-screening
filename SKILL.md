@@ -34,6 +34,7 @@ Use these rules:
 - Add `-ExtraKeywords` only for important disambiguation terms, required entities, or exclusions that would be awkward to pack into the topic.
 - Add `-OnlyUrls` only when the user wants to stop after generating `urls.txt` and not run MinerU.
 - Use graded relevance. Prefer exact matches first, then articles that are useful for writing a report on the topic. If exact matches are sparse, include clearly useful core-related context instead of returning an unnecessarily tiny list.
+- Keep runtime bounded. Do one automatic search pass with a screening pool no larger than `count * 2`; do not run extra search rounds just to force the final result to exactly match the requested count.
 
 After asking clarifying questions, either run the command or show the exact command the user should run. Keep the command simple; do not expose low-level research parameters unless the user asks.
 
@@ -62,7 +63,7 @@ Useful optional questions:
 When the user does not specify:
 
 - Final count: 20 articles.
-- Candidate pool: at least 2x final count.
+- Candidate pool: at most 2x final count.
 - Time range: ask once; if still unknown, use the automatic mode default: recent year.
 - Focus: use `general` unless the task clearly needs a field-specific mode.
 - URL type: prefer original `mp.weixin.qq.com` article URLs.
@@ -111,6 +112,7 @@ Weak or reject:
 - Outside the time range.
 - Ambiguous meaning is wrong.
 - Broken, deleted, login-only, blocked, duplicate, or not a WeChat article.
+- WeChat pages that say the content was deleted, unavailable, or cannot be viewed.
 
 ## Scoring Signals
 

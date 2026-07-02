@@ -293,6 +293,8 @@ def prepare_html_files(
             html = response.text
             if not looks_like_html(html):
                 raise RuntimeError("Response does not look like HTML")
+            if is_wechat_url(task.url):
+                validate_wechat_article_html(html)
             html = make_html_local_readable(html)
             html_path.write_text(html, encoding="utf-8")
             task.html_status = "saved"
@@ -307,6 +309,50 @@ def prepare_html_files(
 def looks_like_html(value: str) -> bool:
     sample = value[:4096].lower()
     return "<html" in sample or "<!doctype html" in sample or "js_content" in sample
+
+
+def strip_tags(value: str) -> str:
+    value = re.sub(r"(?is)<script.*?</script>", " ", value or "")
+    value = re.sub(r"(?is)<style.*?</style>", " ", value)
+    value = re.sub(r"(?s)<[^>]+>", " ", value)
+    value = value.replace("&nbsp;", " ")
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def normalize_text(value: str) -> str:
+    return re.sub(r"\s+", "", value or "").strip()
+
+
+def is_wechat_url(value: str) -> bool:
+    return "mp.weixin.qq.com" in (value or "").lower()
+
+
+def validate_wechat_article_html(html: str) -> None:
+    plain = strip_tags(html)
+    compact = normalize_text(plain)
+    unavailable_markers = [
+        "该内容已被发布者删除",
+        "此内容已被发布者删除",
+        "该内容已被删除",
+        "此内容已被删除",
+        "此内容因违规无法查看",
+        "该内容因违规无法查看",
+        "此内容已被投诉并经审核",
+        "该公众号已被封禁",
+        "此账号已被封",
+        "链接已过期",
+        "文章不存在",
+        "内容不存在",
+        "参数错误",
+        "该内容无法查看",
+        "此内容无法查看",
+    ]
+    for marker in unavailable_markers:
+        if normalize_text(marker) in compact:
+            raise RuntimeError(f"WeChat article unavailable: {marker}")
+
+    if not extract_element_by_id(html, "js_content"):
+        raise RuntimeError("WeChat article content was not found; the article may be deleted or unavailable")
 
 
 def make_html_local_readable(html: str) -> str:
