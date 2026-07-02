@@ -145,19 +145,7 @@ GENERAL_QUERY_SUFFIXES = [
     "行业",
     "方案",
 ]
-MARKETING_QUERY_SUFFIXES = [
-    "品牌营销",
-    "营销案例",
-    "品牌案例",
-    "商业化",
-    "增长",
-    "消费者",
-    "内容营销",
-    "新品",
-    "投放",
-    "传播",
-]
-MARKETING_HINT_TERMS = [
+BRAND_INTENT_TERMS = [
     "营销",
     "品牌",
     "广告",
@@ -197,7 +185,7 @@ PRICE_INTENT_TERMS = [
 ]
 TOPIC_INTENT_TERMS = set(
     VALUE_TERMS
-    + MARKETING_HINT_TERMS
+    + BRAND_INTENT_TERMS
     + BRAND_CASE_TERMS
     + PRICE_INTENT_TERMS
     + [
@@ -283,28 +271,15 @@ def years_from_range(start_date: dt.date | None, end_date: dt.date | None) -> li
     return [str(year) for year in range(start_year, end_year + 1)]
 
 
-def resolve_focus(topic: str, extra_keywords: str, focus: str = "auto") -> str:
-    if focus in {"general", "marketing"}:
-        return focus
-    blob = f"{topic} {extra_keywords}"
-    if any(term in blob for term in MARKETING_HINT_TERMS):
-        return "marketing"
-    return "general"
-
-
 def generate_queries(
     topic: str,
     extra_keywords: str,
     max_queries: int,
     start_date: dt.date | None = None,
     end_date: dt.date | None = None,
-    focus: str = "auto",
 ) -> list[str]:
     years = years_from_range(start_date, end_date)
-    resolved_focus = resolve_focus(topic, extra_keywords, focus)
     suffixes = list(GENERAL_QUERY_SUFFIXES)
-    if resolved_focus == "marketing":
-        suffixes = MARKETING_QUERY_SUFFIXES + suffixes
 
     parts = [topic.strip()]
     for year in years:
@@ -425,7 +400,6 @@ RELEVANCE_TIER_PRIORITY = {
 def score_candidate(
     candidate: Candidate,
     topic: str,
-    focus: str = "auto",
     extra_keywords: str = "",
     exclude_keywords: str = "",
 ) -> None:
@@ -434,7 +408,6 @@ def score_candidate(
     compact_topic = normalize_text(topic)
     source_blob = candidate.source
     query_blob = candidate.search_query
-    resolved_focus = resolve_focus(topic, extra_keywords, focus)
     reasons: list[str] = []
     score = 0
     core_terms = core_topic_terms(topic)
@@ -466,13 +439,7 @@ def score_candidate(
     if len(normalize_text(candidate.snippet)) >= SUBSTANTIVE_SNIPPET_MIN_LENGTH:
         score += 1
         reasons.append("substantive snippet")
-    if resolved_focus == "marketing" and any(term in candidate.title for term in BRAND_CASE_TERMS):
-        score += 2
-        reasons.append("marketing signal")
-    if resolved_focus == "marketing" and any(term in candidate.snippet for term in BRAND_CASE_TERMS):
-        score += 1
-        reasons.append("snippet marketing signal")
-    source_terms = GENERAL_SOURCE_TERMS + (GOOD_SOURCES if resolved_focus == "marketing" else [])
+    source_terms = GENERAL_SOURCE_TERMS
     if any(term in source_blob for term in source_terms):
         score += 2
         reasons.append("relevant account")
@@ -584,11 +551,10 @@ def collect_candidates(
     max_delay: float,
     start_date: dt.date | None = None,
     end_date: dt.date | None = None,
-    focus: str = "auto",
 ) -> tuple[list[Candidate], requests.cookies.RequestsCookieJar]:
     session = requests.Session()
     session.trust_env = False
-    queries = generate_queries(topic, extra_keywords, max_queries, start_date, end_date, focus)
+    queries = generate_queries(topic, extra_keywords, max_queries, start_date, end_date)
     collected: list[Candidate] = []
 
     for index, query in enumerate(queries, start=1):
@@ -603,7 +569,6 @@ def collect_candidates(
             score_candidate(
                 candidate,
                 topic,
-                focus=focus,
                 extra_keywords=extra_keywords,
                 exclude_keywords=exclude_keywords,
             )
@@ -714,7 +679,7 @@ def sleep_random(min_delay: float, max_delay: float) -> None:
     time.sleep(delay)
 
 
-def find_chrome() -> str | None:
+def find_chrome_candidates() -> list[str]:
     candidates = [
         os.environ.get("CHROME_PATH", ""),
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
@@ -722,14 +687,20 @@ def find_chrome() -> str | None:
         r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
         r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
     ]
+    found_items: list[str] = []
     for item in candidates:
         if item and Path(item).exists():
-            return item
+            found_items.append(item)
     for name in ["chrome", "msedge", "google-chrome", "chromium", "chromium-browser"]:
         found = shutil.which(name)
-        if found:
-            return found
-    return None
+        if found and found not in found_items:
+            found_items.append(found)
+    return found_items
+
+
+def find_chrome() -> str | None:
+    candidates = find_chrome_candidates()
+    return candidates[0] if candidates else None
 
 
 def free_port() -> int:
@@ -738,13 +709,20 @@ def free_port() -> int:
         return int(sock.getsockname()[1])
 
 
-def launch_chrome(chrome_path: str, port: int, profile_dir: Path) -> subprocess.Popen[Any]:
+def launch_chrome(
+    chrome_path: str,
+    port: int,
+    profile_dir: Path,
+    log_path: Path,
+    headless: bool = False,
+) -> subprocess.Popen[Any]:
     profile_dir = profile_dir.resolve()
     profile_dir.mkdir(parents=True, exist_ok=True)
     args = [
         chrome_path,
         "--remote-debugging-address=127.0.0.1",
         f"--remote-debugging-port={port}",
+        "--remote-allow-origins=*",
         f"--user-data-dir={profile_dir}",
         "--window-position=-32000,-32000",
         "--window-size=900,700",
@@ -753,19 +731,24 @@ def launch_chrome(chrome_path: str, port: int, profile_dir: Path) -> subprocess.
         "--disable-dev-shm-usage",
         "--no-first-run",
         "--no-default-browser-check",
+        "--disable-background-networking",
         "--disable-sync",
+        "--disable-blink-features=AutomationControlled",
         "about:blank",
     ]
+    if headless:
+        args.insert(1, "--headless=new")
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     startupinfo = None
     if os.name == "nt":
         startupinfo = subprocess.STARTUPINFO()
         startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         startupinfo.wShowWindow = 0
+    log_handle = log_path.open("ab")
     return subprocess.Popen(
         args,
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stderr=log_handle,
         creationflags=creationflags,
         startupinfo=startupinfo,
     )
@@ -777,7 +760,7 @@ def open_json(url: str, timeout: float = 5.0, method: str = "GET") -> Any:
         return json.loads(response.read().decode("utf-8"))
 
 
-def wait_for_chrome(port: int, timeout: float = 10.0) -> None:
+def wait_for_chrome(port: int, timeout: float = 25.0) -> None:
     deadline = time.time() + timeout
     last_error: Exception | None = None
     while time.time() < deadline:
@@ -788,6 +771,49 @@ def wait_for_chrome(port: int, timeout: float = 10.0) -> None:
             last_error = exc
             time.sleep(0.25)
     raise RuntimeError(f"Chrome debugging port did not open: {last_error}")
+
+
+def stop_process(proc: subprocess.Popen[Any] | None) -> None:
+    if proc is None:
+        return
+    if proc.poll() is not None:
+        return
+    proc.terminate()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+
+
+def launch_debug_browser(
+    chrome_path: str | None,
+    port: int,
+    profile_dir: Path,
+) -> tuple[subprocess.Popen[Any], str, bool, str]:
+    candidates = [chrome_path] if chrome_path else find_chrome_candidates()
+    candidates = [item for item in candidates if item]
+    if not candidates:
+        raise RuntimeError("Chrome or Edge was not found.")
+
+    attempts: list[str] = []
+    for browser_path in candidates:
+        for headless in (False, True):
+            profile = profile_dir / (safe_name(Path(browser_path).stem) + ("-headless" if headless else ""))
+            log_path = profile / "browser.log"
+            proc: subprocess.Popen[Any] | None = None
+            try:
+                proc = launch_chrome(browser_path, port, profile, log_path=log_path, headless=headless)
+                wait_for_chrome(port)
+                return proc, browser_path, headless, str(log_path)
+            except Exception as exc:
+                exit_code = proc.poll() if proc else None
+                detail = f"{Path(browser_path).name} {'headless' if headless else 'normal'}: {type(exc).__name__}: {exc}"
+                if exit_code is not None:
+                    detail += f"; exited={exit_code}"
+                detail += f"; log={log_path}"
+                attempts.append(detail)
+                stop_process(proc)
+    raise RuntimeError("All browser launch attempts failed. " + " | ".join(attempts))
 
 
 def new_cdp_page(port: int) -> str:
@@ -945,26 +971,23 @@ def resolve_candidates_with_browser(
     if not candidates:
         return
 
-    chrome = chrome_path or find_chrome()
-    if not chrome:
-        print("Browser verification skipped: Chrome or Edge was not found.")
-        return
-
     port = free_port()
     profile_dir = Path("work") / f"chrome-research-{port}"
-    proc = launch_chrome(chrome, port, profile_dir)
+    proc: subprocess.Popen[Any] | None = None
     cdp: CdpClient | None = None
     try:
         try:
-            wait_for_chrome(port)
+            proc, browser_path, headless, log_path = launch_debug_browser(chrome_path, port, profile_dir)
+            print(
+                "Browser verification using "
+                f"{Path(browser_path).name} ({'headless' if headless else 'normal'}); log: {log_path}"
+            )
         except Exception as exc:
-            exit_code = proc.poll()
             detail = f"{type(exc).__name__}: {exc}"
-            if exit_code is not None:
-                detail += f"; browser exited with code {exit_code}"
             for candidate in candidates[:count]:
                 candidate.resolve_status = f"browser_unavailable: {detail}"
-            print(f"Browser verification skipped: {detail}")
+            print(f"Browser verification failed: {detail}")
+            print("If an AI tool asks for permission to open a local browser, allow it and rerun this step.")
             return
         cdp = CdpClient(new_cdp_page(port))
         cdp.call("Network.enable")
@@ -982,11 +1005,7 @@ def resolve_candidates_with_browser(
     finally:
         if cdp:
             cdp.close()
-        proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
+        stop_process(proc)
         shutil.rmtree(profile_dir, ignore_errors=True)
 
 
@@ -1175,15 +1194,51 @@ def write_urls_file(candidates: list[Candidate], urls_path: Path, count: int) ->
     return len(urls)
 
 
+def load_params_file(args: argparse.Namespace) -> argparse.Namespace:
+    params_file = getattr(args, "params_file", None)
+    if not params_file:
+        return args
+    try:
+        data = json.loads(Path(params_file).read_text(encoding="utf-8-sig"))
+    except Exception as exc:
+        raise ValueError(f"Could not read --params-file {params_file}: {exc}") from exc
+
+    mapping = {
+        "topic": "topic",
+        "count": "count",
+        "mode": "mode",
+        "pool_size": "pool_size",
+        "extra_keywords": "extra_keywords",
+        "exclude_keywords": "exclude_keywords",
+        "min_rating": "min_rating",
+        "start_date": "start_date",
+        "end_date": "end_date",
+        "write_urls": "write_urls",
+        "urls_file": "urls_file",
+        "no_browser": "no_browser",
+        "chrome_path": "chrome_path",
+        "min_delay": "min_delay",
+        "max_delay": "max_delay",
+        "timeout": "timeout",
+    }
+    for key, attribute in mapping.items():
+        if key in data and data[key] not in (None, ""):
+            value = data[key]
+            if attribute in {"urls_file"}:
+                value = Path(value)
+            setattr(args, attribute, value)
+    return args
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Search and verify WeChat article URLs.")
-    parser.add_argument("--topic", required=True, help="Research topic, for example: AI hardware marketing")
+    parser.add_argument("--params-file", type=Path, default=None, help="UTF-8 JSON file containing search parameters")
+    parser.add_argument("--topic", default="", help="Research topic, for example: AI hardware")
     parser.add_argument("--count", type=int, default=20, help="Number of final candidates to keep")
     parser.add_argument("--mode", choices=["fast", "slow"], default="slow", help="Search effort mode. fast is one bounded pass; slow searches broader. Default: slow")
     parser.add_argument("--pool-size", type=int, default=0, help="How many screened candidates to resolve before final selection. Capped by mode.")
     parser.add_argument("--extra-keywords", default="", help="Optional comma/space separated keywords")
     parser.add_argument("--exclude-keywords", default="", help="Optional comma/space separated terms to downrank and exclude from final URLs")
-    parser.add_argument("--focus", choices=["auto", "general", "marketing"], default="auto", help="Scoring/query preset. Default: auto")
     parser.add_argument("--min-rating", choices=["weak", "maybe", "strong"], default="maybe", help="Minimum rating for final URLs. Default: maybe")
     parser.add_argument("--start-date", default="", help="Keep articles on or after this date, YYYY-MM-DD")
     parser.add_argument("--end-date", default="", help="Keep articles on or before this date, YYYY-MM-DD")
@@ -1197,7 +1252,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--min-delay", type=float, default=1.0, help="Minimum random delay in seconds")
     parser.add_argument("--max-delay", type=float, default=3.0, help="Maximum random delay in seconds")
     parser.add_argument("--timeout", type=int, default=15, help="Search request timeout in seconds")
-    return parser.parse_args(argv)
+    try:
+        args = load_params_file(parser.parse_args(argv))
+    except ValueError as exc:
+        parser.error(str(exc))
+    if not args.topic:
+        parser.error("--topic is required unless it is provided by --params-file")
+    return args
 
 
 def main(argv: list[str]) -> int:
@@ -1224,7 +1285,7 @@ def main(argv: list[str]) -> int:
         return 2
 
     print(f"Topic: {args.topic}")
-    print(f"Focus: {resolve_focus(args.topic, args.extra_keywords, args.focus)}")
+    print("Screening mode: general")
     print(
         f"Mode: {args.mode} "
         f"(max_queries={max_queries}, top_per_query={top_per_query}, pool_cap={args.count * pool_multiplier})"
@@ -1249,7 +1310,6 @@ def main(argv: list[str]) -> int:
         max_delay=args.max_delay,
         start_date=start_date,
         end_date=end_date,
-        focus=args.focus,
     )
     print(f"Collected {len(candidates)} unique candidates.")
 

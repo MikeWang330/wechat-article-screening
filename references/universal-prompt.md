@@ -17,7 +17,7 @@ After the first successful clarification, save stable preferences to local proje
 - Business purpose: report writing, case library, quick scan, competitor tracking, or deep research.
 - Preferred article types: case studies, deep analysis, data reports, interviews, official announcements, practical guides.
 - Default quality bar: strict high-quality only, balanced, or broad background allowed.
-- Default exclusions: recruitment, courses, download bait, simple news recaps, low-value reposts.
+- Default exclusions inferred by the AI from my answers: recruitment, courses, download bait, simple news recaps, low-value reposts, or similar low-value formats.
 - Sparse-result behavior: accept fewer high-quality articles or allow core-related background articles.
 - Default mode preference: fast for previews or slow for serious analysis.
 
@@ -28,7 +28,7 @@ Question pool:
 2. What time range should be included, and is it strict?
 3. How many final articles do I need?
 4. What does a good article look like for this task? Examples: case study, deep analysis, trend report, data report, interview, official announcement, practical guide.
-5. What should be excluded?
+5. What kinds of articles feel low-value for this task? Infer concrete exclusions from my answer instead of forcing me to list every exclusion.
 6. If exact matches are sparse, should the result include core-related background articles or return fewer articles?
 
 If the topic is ambiguous, ask me to clarify the intended meaning. For example, "外星人" could mean UFO, Ronaldo, or Alienware.
@@ -43,7 +43,6 @@ After I answer:
    - Use `-Count` from my requested final number. Default to 20 if unknown.
    - Choose `-Mode slow` by default. Use `-Mode fast` if I want a quick preview, low runtime, or say not to spend too long. Use `-Mode slow` if I want to get close to the requested count.
    - Add `-StartDate` and `-EndDate` only if I gave an explicit date range. If no date range is given, let the script use its default recent-year window.
-   - Add `-Focus marketing` only if I clearly want marketing, advertising, brand, sponsorship, campaign, media, or consumer insight articles. Otherwise omit it and let the script use `general`.
    - Add `-ExtraKeywords` only for important disambiguation terms, required entities, or exclusions that would be awkward to pack into the topic.
    - Add `-OnlyUrls` only if I want to stop after generating `urls.txt` and not run MinerU.
    - Use graded relevance. Prefer exact matches first, then articles that would help me write a report on the topic. If exact matches are sparse, include clearly useful core-related context instead of returning an unnecessarily tiny list.

@@ -46,9 +46,9 @@ https://github.com/MikeWang330/wechat-article-screening，这是我的" MinerU T
 
 ```text
 请使用这个仓库：https://github.com/MikeWang330/wechat-article-screening
-先根据我的回答，帮我建立本地 research_memory.json。
-以后类似任务默认用于商业分析；优先要案例复盘、行业分析、数据报告；
-过滤招聘、课程、资料包和普通新闻快讯；找不满时宁可少给，不要硬凑。
+请用一问一答的方式，先帮我建立本地 research_memory.json。
+你来问我用途、偏好的文章类型、时间要求、找不满时怎么处理；
+排除什么内容由你根据我的回答自行判断并写入，不用让我列清单。
 ```
 
 这份记忆只保存在你的电脑，不会上传 GitHub。不要把 MinerU Token、一次性研究主题或敏感信息写进去。
@@ -72,7 +72,7 @@ https://github.com/MikeWang330/wechat-article-screening，这是我的" MinerU T
 
 - 按你的 `research_memory.json` 和本次需求来筛选。
 - 如果没有写时间范围，默认看最近一年。
-- 如果主题不是明确营销问题，默认用通用筛选，不强行套营销逻辑。
+- 始终使用通用筛选，不需要选择行业模式。
 - 如果符合要求的文章不够，宁可少给，也不要拼凑弱相关内容。
 - 如果文章已删除、不可查看或没有正文，会自动跳过，不生成无效 Markdown。
 

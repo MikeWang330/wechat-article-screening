@@ -11,9 +11,6 @@ param(
 
     [string]$ExtraKeywords = "",
 
-    [ValidateSet("auto", "general", "marketing")]
-    [string]$Focus = "auto",
-
     [string]$StartDate = "",
 
     [string]$EndDate = "",
@@ -24,29 +21,26 @@ param(
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
+$workDir = Join-Path $PSScriptRoot "work"
+New-Item -ItemType Directory -Force -Path $workDir | Out-Null
+$researchParamsPath = Join-Path $workDir ("run-project-params-{0}.json" -f (Get-Date -Format "yyyyMMdd-HHmmss-fff"))
+$researchParams = [ordered]@{
+    topic = $Topic
+    count = $Count
+    mode = $Mode
+    pool_size = $PoolSize
+    extra_keywords = $ExtraKeywords
+    start_date = $StartDate
+    end_date = $EndDate
+    write_urls = $true
+}
+$researchParams | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $researchParamsPath -Encoding UTF8
+
 $researchArgs = @(
     "-ExecutionPolicy", "Bypass",
     "-File", ".\run_research.ps1",
-    "-Topic", $Topic,
-    "-Count", $Count,
-    "-Mode", $Mode
+    "-ParamsFile", $researchParamsPath
 )
-
-if ($PoolSize -gt 0) {
-    $researchArgs += @("-PoolSize", $PoolSize)
-}
-if ($ExtraKeywords) {
-    $researchArgs += @("-ExtraKeywords", $ExtraKeywords)
-}
-if ($Focus) {
-    $researchArgs += @("-Focus", $Focus)
-}
-if ($StartDate) {
-    $researchArgs += @("-StartDate", $StartDate)
-}
-if ($EndDate) {
-    $researchArgs += @("-EndDate", $EndDate)
-}
 
 Write-Host "Step 1/2: searching, screening, and resolving WeChat URLs..."
 & powershell @researchArgs

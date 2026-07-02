@@ -7,9 +7,6 @@ param(
 
     [string]$EndDate = "",
 
-    [ValidateSet("auto", "general", "marketing")]
-    [string]$Focus = "general",
-
     [ValidateSet("weak", "maybe", "strong")]
     [string]$MinRating = "maybe",
 
@@ -94,9 +91,6 @@ if (-not $NoMemory -and $MemoryFile -and (Test-Path -LiteralPath $MemoryFile)) {
         if (-not $PSBoundParameters.ContainsKey("Mode") -and $memory.default_mode -in @("fast", "slow")) {
             $Mode = $memory.default_mode
         }
-        if (-not $PSBoundParameters.ContainsKey("Focus") -and $memory.default_focus -in @("auto", "general", "marketing")) {
-            $Focus = $memory.default_focus
-        }
         if (-not $PSBoundParameters.ContainsKey("MinRating") -and $memory.default_min_rating -in @("weak", "maybe", "strong")) {
             $MinRating = $memory.default_min_rating
         }
@@ -119,7 +113,7 @@ if (-not $NoMemory -and $MemoryFile -and (Test-Path -LiteralPath $MemoryFile)) {
 }
 
 Write-Host "Auto mode tip: give a detailed topic when possible, for example: topic + date range + target type."
-Write-Host "Auto mode defaults: Focus=$Focus, MinRating=$MinRating, RecentDays=$RecentDays, Stage=$Stage, Mode=$Mode."
+Write-Host "Auto mode defaults: Screening=general, MinRating=$MinRating, RecentDays=$RecentDays, Stage=$Stage, Mode=$Mode."
 Write-Host "Quality rule: if there are not enough accurate articles, the program returns fewer instead of padding weak matches."
 
 if ($Stage -eq "retry") {
@@ -148,31 +142,28 @@ if (-not $StartDate -and -not $EndDate -and $RecentDays -gt 0) {
     Write-Host "No date range provided. Defaulting to the most recent $RecentDays days: $StartDate to $EndDate"
 }
 
+$workDir = Join-Path $PSScriptRoot "work"
+New-Item -ItemType Directory -Force -Path $workDir | Out-Null
+$researchParamsPath = Join-Path $workDir ("run-auto-params-{0}.json" -f (Get-Date -Format "yyyyMMdd-HHmmss-fff"))
+$researchParams = [ordered]@{
+    topic = $Topic
+    count = $Count
+    mode = $Mode
+    min_rating = $MinRating
+    start_date = $StartDate
+    end_date = $EndDate
+    extra_keywords = $ExtraKeywords
+    exclude_keywords = $ExcludeKeywords
+    pool_size = $PoolSize
+    write_urls = $true
+}
+$researchParams | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $researchParamsPath -Encoding UTF8
+
 $researchArgs = @(
     "-ExecutionPolicy", "Bypass",
     "-File", ".\run_research.ps1",
-    "-Topic", $Topic,
-    "-Count", $Count,
-    "-Mode", $Mode,
-    "-Focus", $Focus,
-    "-MinRating", $MinRating
+    "-ParamsFile", $researchParamsPath
 )
-
-if ($StartDate) {
-    $researchArgs += @("-StartDate", $StartDate)
-}
-if ($EndDate) {
-    $researchArgs += @("-EndDate", $EndDate)
-}
-if ($ExtraKeywords) {
-    $researchArgs += @("-ExtraKeywords", $ExtraKeywords)
-}
-if ($ExcludeKeywords) {
-    $researchArgs += @("-ExcludeKeywords", $ExcludeKeywords)
-}
-if ($PoolSize -gt 0) {
-    $researchArgs += @("-PoolSize", $PoolSize)
-}
 
 Write-Host "Auto mode 1/2: searching, screening, and resolving WeChat URLs..."
 & powershell @researchArgs

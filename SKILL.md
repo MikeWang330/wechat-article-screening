@@ -31,7 +31,6 @@ Use these rules:
 - Use `-Count` from the user's requested final number. Default to 20 if unknown.
 - Choose `-Mode slow` by default. Use `-Mode fast` when the user wants a quick preview, low runtime, or says not to spend too long. Use `-Mode slow` when the user asks to find as many as possible or get close to the requested count.
 - Add `-StartDate` and `-EndDate` only when the user gave an explicit date range. If no date range is given, let `run_auto.ps1` use its default recent-year window.
-- Add `-Focus marketing` only when the user clearly wants marketing, advertising, brand, sponsorship, campaign, media, or consumer insight articles. Otherwise omit it and let automatic mode use `general`.
 - Add `-ExtraKeywords` only for important disambiguation terms, required entities, or exclusions that would be awkward to pack into the topic.
 - Add `-OnlyUrls` only when the user wants to stop after generating `urls.txt` and not run MinerU.
 - Use graded relevance. Prefer exact matches first, then articles that are useful for writing a report on the topic. If exact matches are sparse, include clearly useful core-related context instead of returning an unnecessarily tiny list.
@@ -53,7 +52,7 @@ After the first successful clarification, save stable preferences to local proje
 - Business purpose: report writing, case library, quick scan, competitor tracking, or deep research.
 - Preferred article types: case studies, deep analysis, data reports, interviews, official announcements, practical guides.
 - Default quality bar: strict high-quality only, balanced, or broad background allowed.
-- Default exclusions: recruitment, courses, download bait, simple news recaps, low-value reposts.
+- Default exclusions inferred by the AI from the user's answers: recruitment, courses, download bait, simple news recaps, low-value reposts, or similar low-value formats.
 - Sparse-result behavior: accept fewer high-quality articles or allow core-related background articles.
 - Default mode preference: `fast` for previews or `slow` for serious analysis.
 
@@ -69,7 +68,7 @@ Question pool:
 2. What time range should be included, and is it strict?
 3. How many final articles are needed?
 4. What does a good article look like for this task?
-5. What should be excluded?
+5. What kinds of articles feel low-value for this task? Infer concrete exclusions from the answer instead of forcing the user to list every exclusion.
 6. If exact matches are sparse, should the result include core-related background articles or return fewer articles?
 
 Useful optional questions:
@@ -88,7 +87,7 @@ When the user does not specify:
 - Search mode: `slow`.
 - Candidate pool: up to 2x final count in `fast`, up to about 3x final count in `slow`.
 - Time range: ask once; if still unknown, use the automatic mode default: recent year.
-- Focus: use `general` unless the task clearly needs a field-specific mode.
+- Screening mode: always use the project's general screening path.
 - URL type: prefer original `mp.weixin.qq.com` article URLs.
 
 ## Search Planning
