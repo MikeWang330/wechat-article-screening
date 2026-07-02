@@ -1,20 +1,13 @@
 # 微信公众号文章搜索筛选 + MinerU 批量解析
 
-这个项目用于把一个研究主题变成可解析的微信公众号文章 Markdown。
+这个项目只有两个推荐入口：
 
-完整流程是：
+- **自动模式**：你给主题和数量，程序自动找公众号文章、筛选、转换真实链接，然后跑 MinerU。
+- **手动模式**：你自己准备 `urls.txt`，程序只负责跑 MinerU。
 
-1. 根据主题搜索 Sogou WeChat。
-2. 自动筛选候选公众号文章。
-3. 在后台浏览器里把搜狗跳转链接转换成真实 `mp.weixin.qq.com` 链接。
-4. 把最终链接写入 `urls.txt`。
-5. 把微信公众号文章保存成本地 HTML。
-6. 使用 MinerU `MinerU-HTML` 模型解析本地 HTML。
-7. 下载解析结果，并把 Markdown 文件保存到本地运行目录。
+因为搜狗跳转链接依赖本机浏览器复核，不建议放到 GitHub Actions 云端跑。别人使用这个项目时，应该克隆到自己的电脑本地运行。运行出来的数据也只保存在本地。
 
-所有运行数据默认只保存在本地。`runs/`、`candidates/`、`outputs/`、`work/`、`urls.txt`、`mineru_token.txt` 等都不会上传到 GitHub。
-
-## 安装依赖
+## 安装
 
 ```powershell
 pip install -r requirements.txt
@@ -30,116 +23,64 @@ $env:MINERU_TOKEN="你的 MinerU Token"
 
 也可以在项目目录下创建 `mineru_token.txt`，把 Token 单独放进去。这个文件已被 `.gitignore` 忽略，不会上传。
 
-## 一步跑完整流程
+## 自动模式
 
-搜索、筛选、转换真实公众号链接、写入 `urls.txt`，然后继续跑 MinerU：
+适合：用户只知道主题、关键词和想要多少篇文章。
+
+程序会自动完成：
+
+1. 搜索 Sogou WeChat。
+2. 筛选候选文章。
+3. 用后台浏览器把搜狗跳转链接转换成真实 `mp.weixin.qq.com` 链接。
+4. 写入 `urls.txt`。
+5. 保存微信公众号文章为本地 HTML。
+6. 上传给 MinerU 解析。
+7. 下载结果并收集 Markdown。
+
+运行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\run_project.ps1 -Topic "AI 硬件产业链" -Count 20
-```
-
-只搜索并准备 `urls.txt`，不跑 MinerU：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\run_project.ps1 -Topic "AI 硬件产业链" -Count 20 -SkipMinerU
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销" -Count 20
 ```
 
 限定时间范围：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\run_project.ps1 -Topic "世界杯营销" -Count 20 -StartDate "2025-01-01" -EndDate "2026-07-02"
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销" -Count 20 -StartDate "2025-01-01" -EndDate "2026-07-02"
 ```
 
-非营销主题建议强制使用通用筛选模式：
+非营销主题建议使用通用筛选模式：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\run_project.ps1 -Topic "AI 硬件产业链" -Count 20 -Focus general
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "AI 硬件产业链" -Count 20 -Focus general
 ```
 
-## 直接在 GitHub 上运行
-
-如果不想在本地安装环境，可以用 GitHub Actions 运行。
-
-第一次使用前，先配置自己的 MinerU Token：
-
-1. 打开仓库页面。
-2. 进入 `Settings`。
-3. 进入 `Secrets and variables` > `Actions`。
-4. 点击 `New repository secret`。
-5. 名称填写 `MINERU_TOKEN`。
-6. Value 填自己的 MinerU Token。
-7. 保存。
-
-运行流程：
-
-1. 打开仓库的 `Actions` 页面。
-2. 选择 `Run WeChat Research and MinerU`。
-3. 点击 `Run workflow`。
-4. 输入：
-   - `topic`：关键词或研究主题
-   - `count`：需要多少篇文章
-   - `focus`：`auto`、`general` 或 `marketing`
-   - `start_date` / `end_date`：可选时间范围
-   - `run_mineru`：是否继续跑 MinerU 解析
-5. 等运行结束。
-6. 在本次运行页面底部下载 `Artifacts`。
-
-下载的 artifact 里会包含：
-
-- `urls.txt`
-- `candidates/`
-- `runs/`
-- `library/articles_index.csv`
-- `latest_run.txt`
-
-这些结果只作为本次 GitHub Actions 的下载附件保存，不会提交回仓库。
-
-注意：搜狗跳转解析依赖后台浏览器，GitHub 云端环境偶尔可能遇到验证码或访问限制。如果失败，可以重跑一次，或者改小 `count` / `pool_size`。
-
-## 只做文章搜索和链接转换
-
-生成候选清单和真实公众号链接，但不运行 MinerU：
+如果只想自动生成 `urls.txt`，暂时不跑 MinerU：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\run_research.ps1 -Topic "世界杯营销" -Count 20
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销" -Count 20 -OnlyUrls
 ```
 
-如果只想看候选结果，不想覆盖 `urls.txt`：
+## 手动模式
+
+适合：用户已经自己挑好了公众号文章链接。
+
+先创建 `urls.txt`，每行放一个微信公众号文章链接：
+
+```text
+https://mp.weixin.qq.com/s/xxxx
+https://mp.weixin.qq.com/s/yyyy
+```
+
+然后运行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\run_research.ps1 -Topic "世界杯营销" -Count 20 -NoWriteUrls
+powershell -ExecutionPolicy Bypass -File .\run_manual.ps1
 ```
 
-搜索阶段输出：
+## 输出在哪里
 
-- `candidates/*.csv`：最终选中的候选文章列表
-- `candidates/*.md`：适合直接阅读的候选表
-- `candidates/*-screened-pool.csv`：进入链接转换环节的候选池
-- `urls.txt`：最终确认的真实公众号文章链接
-
-## 只跑 MinerU
-
-如果你已经准备好了 `urls.txt`，可以直接运行：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\run_mineru_html_file.ps1
-```
-
-或者手动运行：
-
-```powershell
-python mineru_batch_wechat.py --urls urls.txt --submit-source html-file
-```
-
-Linux/macOS：
-
-```bash
-./run.sh
-```
-
-## 本地输出结构
-
-每次 MinerU 解析都会保存到一个新的运行目录：
+每次 MinerU 解析都会保存到新的运行目录：
 
 ```text
 runs/
@@ -155,13 +96,22 @@ runs/
     summary.md
 ```
 
+自动搜索阶段会生成：
+
+```text
+candidates/
+  *.csv
+  *.md
+  *-screened-pool.csv
+```
+
 长期索引保存在：
 
 ```text
 library/articles_index.csv
 ```
 
-这个 CSV 是本地生成的，也不会上传到 GitHub。
+这些都是本地运行数据，不会上传到 GitHub。
 
 ## 筛选 Skill
 
