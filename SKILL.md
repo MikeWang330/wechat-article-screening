@@ -1,11 +1,13 @@
 ---
 name: wechat-article-screening
-description: Question-led workflow for finding, screening, and selecting WeChat public-account articles. Use when an AI agent must turn a vague research need into search queries, candidate scoring, clarified inclusion/exclusion rules, and final mp.weixin.qq.com URLs for tools such as MinerU. Suitable for marketing, industry, policy, company, technology, product, sports, and other WeChat article research topics.
+description: Question-led workflow for finding, screening, and selecting WeChat public-account articles. Use when an AI agent must turn a vague research need into an automatic-mode command, search queries, candidate scoring, clarified inclusion/exclusion rules, and final mp.weixin.qq.com URLs for tools such as MinerU. Suitable for marketing, industry, policy, company, technology, product, sports, and other WeChat article research topics.
 ---
 
 # WeChat Article Screening
 
-Use this skill to help a user find useful WeChat public-account articles, especially when the topic is broad or ambiguous. Work by asking the fewest useful questions, then search, screen, resolve links, and produce final URLs.
+Use this skill to help a user find useful WeChat public-account articles, especially when the topic is broad or ambiguous. Work by asking the fewest useful questions, then turn the user's need into the project's automatic mode whenever the project scripts are available.
+
+The preferred handoff is `run_auto.ps1`, which searches, screens, resolves real WeChat article links, writes `urls.txt`, and then runs MinerU. Only produce a manual `urls.txt` workflow when the user already provides article URLs or explicitly asks not to use automatic mode.
 
 For a portable prompt that can be pasted into Claude, ChatGPT, DeepSeek, or another AI assistant, use `references/universal-prompt.md`.
 
@@ -15,11 +17,31 @@ Do not assume keyword matches equal relevance. A good article may have a weak ti
 
 Prioritize fit to the user's intent over generic popularity.
 
+## Automatic Mode Handoff
+
+When this skill is used inside this project, the normal final action is to prepare or run an automatic-mode command:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "<topic plus important constraints>" -Count <count>
+```
+
+Use these rules:
+
+- Put the user's real intent into `-Topic`, including key brands, entities, article type, exclusions, and context when they are important.
+- Use `-Count` from the user's requested final number. Default to 20 if unknown.
+- Add `-StartDate` and `-EndDate` only when the user gave an explicit date range. If no date range is given, let `run_auto.ps1` use its default recent-year window.
+- Add `-Focus marketing` only when the user clearly wants marketing, advertising, brand, sponsorship, campaign, media, or consumer insight articles. Otherwise omit it and let automatic mode use `general`.
+- Add `-ExtraKeywords` only for important disambiguation terms, required entities, or exclusions that would be awkward to pack into the topic.
+- Add `-OnlyUrls` only when the user wants to stop after generating `urls.txt` and not run MinerU.
+- If there are not enough accurate articles, return fewer rather than padding with weak matches.
+
+After asking clarifying questions, either run the command or show the exact command the user should run. Keep the command simple; do not expose low-level research parameters unless the user asks.
+
 ## Ask First
 
-Ask only questions that materially change the result. Prefer 3 to 5 questions, and continue with defaults if the user does not know.
+Ask only questions that materially change the result. Prefer 1 to 3 questions, and continue with defaults if the user does not know. If topic, count, and time range are already inferable, do not ask; proceed to automatic mode.
 
-Required questions:
+Question pool:
 
 1. What is the exact research topic?
 2. What time range should be included?
@@ -41,8 +63,8 @@ When the user does not specify:
 
 - Final count: 20 articles.
 - Candidate pool: at least 2x final count.
-- Time range: ask once; if still unknown, do not filter by date.
-- Focus: infer from topic, but expose uncertainty.
+- Time range: ask once; if still unknown, use the automatic mode default: recent year.
+- Focus: use `general` unless the task clearly needs a field-specific mode.
 - URL type: prefer original `mp.weixin.qq.com` article URLs.
 
 ## Search Planning
@@ -114,9 +136,10 @@ Negative signals:
 Return:
 
 1. Clarified criteria used for screening.
-2. Search query groups used.
-3. Candidate table with title, account/source, date, score or class, URL, and reason.
-4. Final selected URLs, one per line.
-5. Rejections or caveats, especially ambiguity, thin search results, old dates, or link-resolution failures.
+2. The automatic-mode command to run, if the project scripts are available.
+3. Search query groups used.
+4. Candidate table with title, account/source, date, score or class, URL, and reason.
+5. Final selected URLs, one per line.
+6. Rejections or caveats, especially ambiguity, thin search results, old dates, or link-resolution failures.
 
 When preparing input for MinerU, write only final verified `mp.weixin.qq.com` URLs to `urls.txt`.

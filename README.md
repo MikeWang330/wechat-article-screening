@@ -25,6 +25,19 @@ $env:MINERU_TOKEN="你的 MinerU Token"
 
 ## 自动模式
 
+如果你准备用 AI 帮你操作这个项目，推荐直接把这个仓库链接给 AI，然后这样说：
+
+```text
+请使用这个仓库的 SKILL.md，帮我把需求整理成自动模式命令。
+我的需求是：2025年至今，找 20 篇 AI 硬件品牌营销案例相关的微信公众号文章。
+```
+
+AI 会先判断你的需求是否清楚；如果不清楚，会问少量关键问题。确认后，它应该优先给出或直接运行下面这种自动模式命令：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "AI 硬件 品牌营销案例 2025年至今" -Count 20
+```
+
 最简单用法：
 
 ```powershell
