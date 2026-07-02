@@ -240,6 +240,17 @@ def normalize_text(value: str) -> str:
     return re.sub(r"\s+", "", value or "").strip()
 
 
+def split_keywords(value: str) -> list[str]:
+    terms: list[str] = []
+    seen: set[str] = set()
+    for item in re.split(r"[,，;；\s]+", value or ""):
+        term = item.strip()
+        if term and term not in seen:
+            terms.append(term)
+            seen.add(term)
+    return terms
+
+
 def strip_tags(value: str) -> str:
     value = re.sub(r"(?is)<script.*?</script>", " ", value)
     value = re.sub(r"(?is)<style.*?</style>", " ", value)
@@ -375,6 +386,14 @@ def candidate_matches_required_intent(candidate: Candidate, topic: str) -> bool:
     return any(normalize_text(term) in blob for term in required_terms)
 
 
+def candidate_matches_exclusion(candidate: Candidate, exclude_keywords: str) -> list[str]:
+    terms = [normalize_text(term) for term in split_keywords(exclude_keywords)]
+    if not terms:
+        return []
+    blob = normalize_text(f"{candidate.title} {candidate.snippet} {candidate.source}")
+    return [term for term in terms if term and term in blob]
+
+
 def relevance_tier(candidate: Candidate, topic: str) -> str:
     compact_blob = normalize_text(f"{candidate.title} {candidate.snippet}")
     compact_topic = normalize_text(topic)
@@ -403,7 +422,13 @@ RELEVANCE_TIER_PRIORITY = {
 }
 
 
-def score_candidate(candidate: Candidate, topic: str, focus: str = "auto", extra_keywords: str = "") -> None:
+def score_candidate(
+    candidate: Candidate,
+    topic: str,
+    focus: str = "auto",
+    extra_keywords: str = "",
+    exclude_keywords: str = "",
+) -> None:
     title_blob = f"{candidate.title} {candidate.snippet}"
     compact_blob = normalize_text(title_blob)
     compact_topic = normalize_text(topic)
@@ -457,6 +482,10 @@ def score_candidate(candidate: Candidate, topic: str, focus: str = "auto", extra
     if any(term in candidate.title for term in LOW_VALUE_TERMS):
         score -= 4
         reasons.append("low-value format")
+    exclusion_hits = candidate_matches_exclusion(candidate, exclude_keywords)
+    if exclusion_hits:
+        score -= 6
+        reasons.append(f"memory exclusion: {'/'.join(exclusion_hits[:3])}")
     if core_terms and not has_core_match and compact_topic not in compact_blob:
         score -= 4
         reasons.append("missing core topic")
@@ -547,6 +576,7 @@ def parse_sogou_results(page_html: str, query: str) -> list[Candidate]:
 def collect_candidates(
     topic: str,
     extra_keywords: str,
+    exclude_keywords: str,
     max_queries: int,
     top_per_query: int,
     timeout: int,
@@ -570,7 +600,13 @@ def collect_candidates(
             print(f"  search failed: {type(exc).__name__}: {exc}")
             results = []
         for candidate in results:
-            score_candidate(candidate, topic, focus=focus, extra_keywords=extra_keywords)
+            score_candidate(
+                candidate,
+                topic,
+                focus=focus,
+                extra_keywords=extra_keywords,
+                exclude_keywords=exclude_keywords,
+            )
         collected.extend(results)
         if index < len(queries):
             sleep_random(min_delay, max_delay)
@@ -658,6 +694,7 @@ def select_final_candidates(
     count: int,
     min_rating: str = "maybe",
     topic: str = "",
+    exclude_keywords: str = "",
 ) -> list[Candidate]:
     min_level = RATING_LEVELS.get(min_rating, RATING_LEVELS["maybe"])
     resolved = [
@@ -667,6 +704,7 @@ def select_final_candidates(
         and RATING_LEVELS.get(candidate.rating, 0) >= min_level
         and candidate_matches_core_topic(candidate, topic)
         and RELEVANCE_TIER_PRIORITY.get(candidate.relevance_tier, 0) >= RELEVANCE_TIER_PRIORITY["core_related"]
+        and not candidate_matches_exclusion(candidate, exclude_keywords)
     ]
     return rank_for_final(resolved)[:count]
 
@@ -1144,6 +1182,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--mode", choices=["fast", "slow"], default="slow", help="Search effort mode. fast is one bounded pass; slow searches broader. Default: slow")
     parser.add_argument("--pool-size", type=int, default=0, help="How many screened candidates to resolve before final selection. Capped by mode.")
     parser.add_argument("--extra-keywords", default="", help="Optional comma/space separated keywords")
+    parser.add_argument("--exclude-keywords", default="", help="Optional comma/space separated terms to downrank and exclude from final URLs")
     parser.add_argument("--focus", choices=["auto", "general", "marketing"], default="auto", help="Scoring/query preset. Default: auto")
     parser.add_argument("--min-rating", choices=["weak", "maybe", "strong"], default="maybe", help="Minimum rating for final URLs. Default: maybe")
     parser.add_argument("--start-date", default="", help="Keep articles on or after this date, YYYY-MM-DD")
@@ -1196,10 +1235,13 @@ def main(argv: list[str]) -> int:
             f"{start_date.isoformat() if start_date else 'any'} to "
             f"{end_date.isoformat() if end_date else 'any'}"
         )
+    if args.exclude_keywords:
+        print(f"Local memory exclusions: {args.exclude_keywords}")
     print("Collecting candidates...")
     candidates, sogou_cookies = collect_candidates(
         topic=args.topic,
         extra_keywords=args.extra_keywords,
+        exclude_keywords=args.exclude_keywords,
         max_queries=max_queries,
         top_per_query=top_per_query,
         timeout=args.timeout,
@@ -1259,6 +1301,7 @@ def main(argv: list[str]) -> int:
         args.count,
         min_rating=args.min_rating,
         topic=args.topic,
+        exclude_keywords=args.exclude_keywords,
     )
     if len(final_candidates) < args.count:
         print(

@@ -30,6 +30,26 @@ $env:MINERU_TOKEN="你的 MinerU Token"
 
 也可以在项目目录下创建 `mineru_token.txt`，把 Token 单独放进去。这个文件不会上传到 GitHub。
 
+## 本地研究记忆
+
+项目会自动读取本地的 `research_memory.json`，用来记住长期筛选偏好，例如：
+
+- 默认用途：商业分析、案例库、快速扫资料。
+- 偏好的文章类型：案例复盘、行业分析、数据报告。
+- 默认排除项：招聘、课程、资料包、下载、普通新闻快讯。
+- 找不满时：宁可少给高质量结果，还是允许补充背景文章。
+- 默认运行模式：`fast` 或 `slow`。
+
+第一次使用时，可以从模板复制一份：
+
+```powershell
+Copy-Item .\research_memory.example.json .\research_memory.json
+```
+
+然后让 AI 根据你的回答修改 `research_memory.json`。这个文件只保存在本地，已经被 `.gitignore` 忽略，不会上传到 GitHub。
+
+不要把 MinerU Token、一次性研究主题或敏感信息写进 `research_memory.json`。
+
 ## AI 用户
 
 适合你把这个仓库链接发给 Codex、Claude、ChatGPT、DeepSeek 等 AI，让 AI 在你的电脑上帮你跑。
@@ -54,14 +74,15 @@ $env:MINERU_TOKEN="你的 MinerU Token"
 - 哪些内容不要？比如招聘、课程、资料包、新闻快讯、低质量转载。
 - 找不满数量时，是宁可少给高质量结果，还是允许放宽到背景文章？
 
-如果 AI 支持记忆，你可以让它记住你的偏好，例如：
+AI 会把稳定偏好记录到本地 `research_memory.json`。你可以这样说：
 
 ```text
+请把这些偏好写入本地 research_memory.json：
 以后类似任务默认用于商业分析；优先要案例复盘、行业分析、数据报告；
 过滤招聘、课程、资料包和普通新闻快讯；找不满时宁可少给，不要硬凑。
 ```
 
-之后再用时，你只要说新的主题和数量即可。除非你主动改要求，AI 会沿用之前的筛选习惯。
+之后再用时，你只要说新的主题和数量即可。除非你主动改要求，AI 和程序都会沿用这份本地筛选习惯。
 
 自动模式默认规则：
 
@@ -215,6 +236,7 @@ references/universal-prompt.md
 这些文件和目录属于个人运行数据，已经被 `.gitignore` 忽略：
 
 - `mineru_token.txt`
+- `research_memory.json`
 - `urls.txt`
 - `runs/`
 - `candidates/`

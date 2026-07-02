@@ -22,6 +22,12 @@ param(
 
     [int]$RecentDays = 365,
 
+    [string]$ExcludeKeywords = "",
+
+    [string]$MemoryFile = "research_memory.json",
+
+    [switch]$NoMemory,
+
     [ValidateSet("all", "search", "mineru", "retry")]
     [string]$Stage = "all",
 
@@ -30,6 +36,87 @@ param(
 
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
+
+function Join-Terms {
+    param([object[]]$Values)
+
+    $seen = @{}
+    $result = @()
+
+    foreach ($value in $Values) {
+        if ($null -eq $value) {
+            continue
+        }
+        $items = @()
+        if ($value -is [System.Array]) {
+            $items = $value
+        } else {
+            $items = @($value)
+        }
+        foreach ($item in $items) {
+            if ($null -eq $item) {
+                continue
+            }
+            foreach ($part in ($item.ToString() -split "[,，;；]")) {
+                $term = $part.Trim()
+                if ($term -and -not $seen.ContainsKey($term)) {
+                    $seen[$term] = $true
+                    $result += $term
+                }
+            }
+        }
+    }
+
+    return ($result -join ",")
+}
+
+function Get-MemoryValues {
+    param(
+        [object]$Memory,
+        [string[]]$Names
+    )
+
+    $values = @()
+    foreach ($name in $Names) {
+        $property = $Memory.PSObject.Properties[$name]
+        if ($property -and $null -ne $property.Value) {
+            $values += $property.Value
+        }
+    }
+    return $values
+}
+
+if (-not $NoMemory -and $MemoryFile -and (Test-Path -LiteralPath $MemoryFile)) {
+    try {
+        $memory = Get-Content -LiteralPath $MemoryFile -Raw -Encoding UTF8 | ConvertFrom-Json
+        Write-Host "Loaded local research memory: $MemoryFile"
+
+        if (-not $PSBoundParameters.ContainsKey("Mode") -and $memory.default_mode -in @("fast", "slow")) {
+            $Mode = $memory.default_mode
+        }
+        if (-not $PSBoundParameters.ContainsKey("Focus") -and $memory.default_focus -in @("auto", "general", "marketing")) {
+            $Focus = $memory.default_focus
+        }
+        if (-not $PSBoundParameters.ContainsKey("MinRating") -and $memory.default_min_rating -in @("weak", "maybe", "strong")) {
+            $MinRating = $memory.default_min_rating
+        }
+        if (-not $PSBoundParameters.ContainsKey("RecentDays") -and $memory.default_recent_days) {
+            $RecentDays = [int]$memory.default_recent_days
+        }
+
+        $memoryExtra = Get-MemoryValues $memory @("preferred_article_types", "default_extra_keywords", "include_keywords")
+        if ($memoryExtra.Count -gt 0) {
+            $ExtraKeywords = Join-Terms @($ExtraKeywords, $memoryExtra)
+        }
+
+        $memoryExclude = Get-MemoryValues $memory @("default_exclusions", "exclude_keywords")
+        if ($memoryExclude.Count -gt 0) {
+            $ExcludeKeywords = Join-Terms @($ExcludeKeywords, $memoryExclude)
+        }
+    } catch {
+        Write-Warning "Could not read local research memory from ${MemoryFile}: $($_.Exception.Message)"
+    }
+}
 
 Write-Host "Auto mode tip: give a detailed topic when possible, for example: topic + date range + target type."
 Write-Host "Auto mode defaults: Focus=$Focus, MinRating=$MinRating, RecentDays=$RecentDays, Stage=$Stage, Mode=$Mode."
@@ -79,6 +166,9 @@ if ($EndDate) {
 }
 if ($ExtraKeywords) {
     $researchArgs += @("-ExtraKeywords", $ExtraKeywords)
+}
+if ($ExcludeKeywords) {
+    $researchArgs += @("-ExcludeKeywords", $ExcludeKeywords)
 }
 if ($PoolSize -gt 0) {
     $researchArgs += @("-PoolSize", $PoolSize)

@@ -13,6 +13,8 @@ param(
 
     [string]$ExtraKeywords = "",
 
+    [string]$ExcludeKeywords = "",
+
     [ValidateSet("auto", "general", "marketing")]
     [string]$Focus = "auto",
 
@@ -57,6 +59,9 @@ if ($PoolSize -gt 0) {
 }
 if ($ExtraKeywords) {
     $arguments += @("--extra-keywords", $ExtraKeywords)
+}
+if ($ExcludeKeywords) {
+    $arguments += @("--exclude-keywords", $ExcludeKeywords)
 }
 if ($Focus) {
     $arguments += @("--focus", $Focus)

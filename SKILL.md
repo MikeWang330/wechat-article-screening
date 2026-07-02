@@ -5,7 +5,7 @@ description: Question-led workflow for finding, screening, and selecting WeChat 
 
 # WeChat Article Screening
 
-Use this skill to help a user find useful WeChat public-account articles, especially when the topic is broad or ambiguous. Work like a research partner: clarify the user's actual job-to-be-done, remember stable screening preferences when memory is available, then turn the user's need into the project's automatic mode whenever the project scripts are available.
+Use this skill to help a user find useful WeChat public-account articles, especially when the topic is broad or ambiguous. Work like a research partner: clarify the user's actual job-to-be-done, save stable screening preferences to the project's local `research_memory.json` when available, then turn the user's need into the project's automatic mode whenever the project scripts are available.
 
 The preferred handoff is `run_auto.ps1`, which searches, screens, resolves real WeChat article links, writes `urls.txt`, and then runs MinerU. Only produce a manual `urls.txt` workflow when the user already provides article URLs or explicitly asks not to use automatic mode.
 
@@ -45,7 +45,10 @@ After asking clarifying questions, either run the command or show the exact comm
 
 On a user's first run, ask a slightly richer but still lightweight intake. The goal is to learn the user's research pattern, not to make them operate the tool. Prefer 3 to 5 short questions when preferences are unknown. On later runs, reuse known preferences and ask only when the new request conflicts with them or is genuinely ambiguous.
 
-If memory is available, remember stable preferences after the first successful clarification, such as:
+After the first successful clarification, save stable preferences to local project memory when the project directory is writable:
+
+1. If `research_memory.json` does not exist and `research_memory.example.json` exists, copy the example to `research_memory.json`.
+2. Update only stable preferences in `research_memory.json`, such as:
 
 - Business purpose: report writing, case library, quick scan, competitor tracking, or deep research.
 - Preferred article types: case studies, deep analysis, data reports, interviews, official announcements, practical guides.
@@ -54,7 +57,9 @@ If memory is available, remember stable preferences after the first successful c
 - Sparse-result behavior: accept fewer high-quality articles or allow core-related background articles.
 - Default mode preference: `fast` for previews or `slow` for serious analysis.
 
-Do not store one-off topics, private tokens, or sensitive project details as memory. If persistent memory is not available, summarize the learned pattern in the conversation and apply it for the rest of the thread.
+Do not store one-off topics, private tokens, user credentials, or sensitive project details in local memory. If the file cannot be written, summarize the learned pattern in the conversation and apply it for the rest of the thread.
+
+When running automatic mode, let `run_auto.ps1` read `research_memory.json` by default. Use `-NoMemory` only when the user explicitly wants to ignore local preferences for this run.
 
 Ask only questions that materially change the result. If topic, count, time range, and user pattern are already inferable, do not ask; proceed to automatic mode.
 

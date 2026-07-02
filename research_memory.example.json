@@ -1,0 +1,24 @@
+{
+  "default_purpose": "商业分析",
+  "preferred_article_types": [
+    "案例复盘",
+    "行业分析",
+    "数据报告"
+  ],
+  "default_quality_bar": "balanced",
+  "default_exclusions": [
+    "招聘",
+    "课程",
+    "资料包",
+    "下载",
+    "普通新闻快讯",
+    "低质量转载"
+  ],
+  "sparse_result_policy": "prefer_fewer_high_quality",
+  "default_mode": "slow",
+  "default_focus": "general",
+  "default_min_rating": "maybe",
+  "default_recent_days": 365,
+  "default_extra_keywords": [],
+  "notes": "复制为 research_memory.json 后按自己的研究习惯修改。不要把 Token、一次性 topic 或敏感项写进来。"
+}
