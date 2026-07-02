@@ -1,0 +1,27 @@
+$ErrorActionPreference = "Stop"
+
+$pythonCandidates = @(
+    "$env:LOCALAPPDATA\Python\bin\python.exe",
+    "$env:LOCALAPPDATA\Python\pythoncore-3.14-64\python.exe",
+    "python",
+    "py"
+)
+
+$python = $null
+foreach ($candidate in $pythonCandidates) {
+    try {
+        $command = Get-Command $candidate -ErrorAction Stop
+        if ($command.Source -like "*Microsoft\WindowsApps\python.exe") {
+            continue
+        }
+        $python = $candidate
+        break
+    } catch {
+    }
+}
+
+if (-not $python) {
+    throw "No usable Python was found. Please install Python or add it to PATH."
+}
+
+& $python mineru_batch_wechat.py --urls urls.txt --submit-source html-file
