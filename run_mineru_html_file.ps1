@@ -1,3 +1,8 @@
+param(
+    [string]$Urls = "urls.txt",
+    [string]$OutputDir = ""
+)
+
 $ErrorActionPreference = "Stop"
 
 $pythonCandidates = @(
@@ -24,4 +29,9 @@ if (-not $python) {
     throw "No usable Python was found. Please install Python or add it to PATH."
 }
 
-& $python mineru_batch_wechat.py --urls urls.txt --submit-source html-file
+$arguments = @("mineru_batch_wechat.py", "--urls", $Urls, "--submit-source", "html-file")
+if ($OutputDir) {
+    $arguments += @("--output-dir", $OutputDir)
+}
+
+& $python @arguments

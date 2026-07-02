@@ -775,7 +775,54 @@ def write_outputs(
         encoding="utf-8",
     )
     write_run_summary(tasks, batch_results, run_dir, urls_path, submit_source)
+    write_run_state(tasks, batch_results, run_dir, urls_path, submit_source)
     update_article_index(tasks, run_dir, urls_path, submit_source)
+
+
+def write_run_state(
+    tasks: List[ArticleTask],
+    batch_results: List[Dict[str, Any]],
+    run_dir: Path,
+    urls_path: Path,
+    submit_source: str,
+) -> None:
+    total = len(tasks)
+    success_count = sum(1 for task in tasks if normalize_status(task.status) in SUCCESS_STATUSES)
+    failed_count = sum(1 for task in tasks if normalize_status(task.status) in FAILED_STATUSES)
+    pending_count = total - success_count - failed_count
+    markdown_count = sum(len(task.markdown_files) for task in tasks)
+    failed_urls_path = run_dir / "failed_urls.txt"
+
+    if failed_count:
+        next_action = "retry_failed"
+    elif pending_count:
+        next_action = "inspect_pending"
+    else:
+        next_action = "done"
+
+    payload = {
+        "run_id": run_dir.name,
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "source_urls_file": str(urls_path),
+        "submit_source": submit_source,
+        "model_version": MODEL_VERSION,
+        "total_urls": total,
+        "mineru_success_count": success_count,
+        "mineru_failed_count": failed_count,
+        "pending_count": pending_count,
+        "markdown_file_count": markdown_count,
+        "batch_count": len(batch_results),
+        "batch_ids": [batch.get("batch_id", "") for batch in batch_results if batch.get("batch_id")],
+        "run_dir": str(run_dir),
+        "markdown_dir": str(run_dir / "markdown"),
+        "result_json": str(run_dir / "result.json"),
+        "failed_urls_file": str(failed_urls_path),
+        "next_action": next_action,
+    }
+    (run_dir / "run_state.json").write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
 
 def write_run_summary(
@@ -809,6 +856,7 @@ def write_run_summary(
         f"- Markdown: `{run_dir / 'markdown'}`",
         f"- HTML: `{run_dir / 'html'}`",
         f"- Result JSON: `{run_dir / 'result.json'}`",
+        f"- Run State: `{run_dir / 'run_state.json'}`",
         f"- Failed URLs: `{run_dir / 'failed_urls.txt'}`",
         f"- Successful URLs: `{run_dir / 'successful_urls.txt'}`",
         "",
@@ -1135,8 +1183,6 @@ def main() -> int:
             )
 
         write_outputs(tasks, batch_results, run_dir, urls_path, args.submit_source)
-        write_latest_pointer(run_dir)
-
         write_latest_pointer(run_dir)
 
         failed_count = sum(1 for task in tasks if normalize_status(task.status) in FAILED_STATUSES)

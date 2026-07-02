@@ -964,16 +964,17 @@ def write_outputs(
     with md_path.open("w", encoding="utf-8-sig") as handle:
         handle.write(f"# WeChat article candidates: {topic}\n\n")
         handle.write(f"Generated at: {dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-        handle.write("| # | Rating | Score | Title | Account | Date | Status | URL |\n")
-        handle.write("|---:|---|---:|---|---|---|---|---|\n")
+        handle.write("| # | Rating | Score | Title | Account | Date | Status | Reason | URL |\n")
+        handle.write("|---:|---|---:|---|---|---|---|---|---|\n")
         for index, candidate in enumerate(candidates, start=1):
             url = candidate.resolved_url or candidate.sogou_url
             title = markdown_cell(candidate.title)
             source = markdown_cell(candidate.source)
             status = markdown_cell(candidate.resolve_status)
+            reason = markdown_cell(candidate.reason)
             handle.write(
                 f"| {index} | {candidate.rating} | {candidate.score} | "
-                f"[{title}]({url}) | {source} | {candidate.date} | {status} | "
+                f"[{title}]({url}) | {source} | {candidate.date} | {status} | {reason} | "
                 f"[link]({url}) |\n"
             )
     if pool_csv_path is not None and pool_candidates is not None:

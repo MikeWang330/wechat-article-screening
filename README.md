@@ -57,6 +57,12 @@ powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 
 powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 品牌案例 赞助商" -Count 20 -OnlyUrls
 ```
 
+如果上一次 MinerU 有失败链接，可以直接重试失败项：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\run_retry_failed.ps1
+```
+
 ## 手动模式
 
 先创建 `urls.txt`，每行放一个微信公众号文章链接：
@@ -88,6 +94,7 @@ runs/
     failed_urls.txt
     successful_urls.txt
     summary.md
+    run_state.json
 ```
 
 自动搜索阶段会生成：
