@@ -2212,13 +2212,17 @@ def latest_log_match(logs: list[str], pattern: str) -> re.Match[str] | None:
     return None
 
 
-def no_url_summary(job: Job) -> str:
-    collected = latest_log_match(job.logs, r"Collected\s+(\d+)\s+unique candidates")
-    kept = latest_log_match(job.logs, r"Date filter kept\s+(\d+)\s+of\s+(\d+)")
-    browser_failed = any(
+def browser_verification_failed(job: Job) -> bool:
+    return any(
         "Browser verification failed" in line or "Browser verification unavailable" in line
         for line in job.logs
     )
+
+
+def no_url_summary(job: Job) -> str:
+    collected = latest_log_match(job.logs, r"Collected\s+(\d+)\s+unique candidates")
+    kept = latest_log_match(job.logs, r"Date filter kept\s+(\d+)\s+of\s+(\d+)")
+    browser_failed = browser_verification_failed(job)
     if browser_failed:
         if kept:
             return f"已筛出 {kept.group(1)} 条候选，但验证浏览器没有稳定启动，暂时没有微信原文链接。"
@@ -2386,15 +2390,19 @@ def run_job_inner(job: Job, payload: dict[str, Any]) -> None:
             job.outputs = collect_output_items(job)
             return
 
-        if not payload.get("run_mineru"):
-            url_count = usable_wechat_url_count()
-            job.results = read_result_items(job)
-            if url_count <= 0:
-                job.status = "done"
-                job.summary = no_url_summary(job)
+        url_count = usable_wechat_url_count()
+        job.results = read_result_items(job)
+        if url_count <= 0:
+            job.status = "failed" if browser_verification_failed(job) else "done"
+            job.summary = no_url_summary(job)
+            if payload.get("run_mineru"):
+                job.append("No usable WeChat URLs were written, so MinerU conversion was skipped.")
+            else:
                 job.append("No usable WeChat URLs were written, so local HTML preparation was skipped.")
-                job.outputs = collect_output_items(job)
-                return
+            job.outputs = collect_output_items(job)
+            return
+
+        if not payload.get("run_mineru"):
             job.append("Step 2: preparing local HTML files.")
             run_process(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".\\run_html_only.ps1"], job, payload)
             if finish_if_canceled(job):
