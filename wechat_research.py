@@ -1103,19 +1103,39 @@ def rank_for_final(candidates: list[Candidate]) -> list[Candidate]:
     )
 
 
+def screening_pool_multiplier(mode: str) -> int:
+    return 2 if mode == "fast" else 4
+
+
 def select_screening_pool(
     candidates: list[Candidate],
     count: int,
     pool_size: int,
     mode: str = "slow",
 ) -> list[Candidate]:
-    multiplier = 2 if mode == "fast" else 3
+    multiplier = screening_pool_multiplier(mode)
     max_pool_size = max(count, count * multiplier)
     target_pool_size = min(max(count, pool_size), max_pool_size)
     return rank_for_screening(candidates)[:target_pool_size]
 
 
 RATING_LEVELS = {"weak": 0, "maybe": 1, "strong": 2}
+
+
+def candidate_is_final_eligible(
+    candidate: Candidate,
+    min_rating: str = "maybe",
+    topic: str = "",
+    exclude_keywords: str = "",
+) -> bool:
+    min_level = RATING_LEVELS.get(min_rating, RATING_LEVELS["maybe"])
+    return (
+        "mp.weixin.qq.com" in candidate.resolved_url
+        and RATING_LEVELS.get(candidate.rating, 0) >= min_level
+        and candidate_matches_core_topic(candidate, topic)
+        and RELEVANCE_TIER_PRIORITY.get(candidate.relevance_tier, 0) >= RELEVANCE_TIER_PRIORITY["core_related"]
+        and not candidate_matches_exclusion(candidate, exclude_keywords)
+    )
 
 
 def select_final_candidates(
@@ -1125,15 +1145,10 @@ def select_final_candidates(
     topic: str = "",
     exclude_keywords: str = "",
 ) -> list[Candidate]:
-    min_level = RATING_LEVELS.get(min_rating, RATING_LEVELS["maybe"])
     resolved = [
         candidate
         for candidate in candidates
-        if "mp.weixin.qq.com" in candidate.resolved_url
-        and RATING_LEVELS.get(candidate.rating, 0) >= min_level
-        and candidate_matches_core_topic(candidate, topic)
-        and RELEVANCE_TIER_PRIORITY.get(candidate.relevance_tier, 0) >= RELEVANCE_TIER_PRIORITY["core_related"]
-        and not candidate_matches_exclusion(candidate, exclude_keywords)
+        if candidate_is_final_eligible(candidate, min_rating, topic, exclude_keywords)
     ]
     return rank_for_final(resolved)[:count]
 
@@ -1472,6 +1487,9 @@ def resolve_candidates_with_browser(
     chrome_path: str | None,
     cookies: requests.cookies.RequestsCookieJar | None = None,
     target_verified_count: int = 0,
+    min_rating: str = "maybe",
+    topic: str = "",
+    exclude_keywords: str = "",
 ) -> None:
     if not candidates:
         return
@@ -1530,11 +1548,11 @@ def resolve_candidates_with_browser(
                 verified_count = sum(
                     1
                     for item in candidates[:count]
-                    if "mp.weixin.qq.com" in item.resolved_url
+                    if candidate_is_final_eligible(item, min_rating, topic, exclude_keywords)
                 )
                 if verified_count >= target_verified_count:
                     print(
-                        "Verified target reached "
+                        "Eligible target reached "
                         f"({verified_count}/{target_verified_count}); stopping browser verification early."
                     )
                     break
@@ -1909,7 +1927,7 @@ def main(argv: list[str]) -> int:
     default_top_per_query = 8 if args.mode == "fast" else 10
     max_queries = args.max_queries if args.max_queries > 0 else default_max_queries
     top_per_query = args.top_per_query if args.top_per_query > 0 else default_top_per_query
-    pool_multiplier = 2
+    pool_multiplier = screening_pool_multiplier(args.mode)
     pool_size = args.pool_size if args.pool_size > 0 else args.count * pool_multiplier
     try:
         start_date = parse_date_arg(args.start_date, "--start-date")
@@ -2011,6 +2029,9 @@ def main(argv: list[str]) -> int:
             chrome_path=args.chrome_path,
             cookies=sogou_cookies,
             target_verified_count=args.count,
+            min_rating=args.min_rating,
+            topic=args.topic,
+            exclude_keywords=args.exclude_keywords,
         )
         screening_pool = dedupe_candidates(screening_pool)
 
