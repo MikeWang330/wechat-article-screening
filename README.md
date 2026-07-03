@@ -37,7 +37,7 @@ $env:MINERU_TOKEN="你的 MinerU Token"
 在项目目录运行：
 
 ```powershell
-python web_app.py
+powershell -ExecutionPolicy Bypass -File .\start_web.ps1
 ```
 
 然后打开：
@@ -45,6 +45,8 @@ python web_app.py
 ```text
 http://127.0.0.1:8787
 ```
+
+请保持启动窗口打开。Windows 下不要用隐藏窗口方式启动网页服务，否则 Chrome 验证窗口可能因为 Crashpad 权限问题启动失败。
 
 网页只在本机运行。页面里只需要做几件事：
 

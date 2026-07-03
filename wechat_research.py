@@ -1485,6 +1485,7 @@ def resolve_candidates_with_browser(
     profile_dir = browser_work_dir("chrome-research", port)
     proc: subprocess.Popen[Any] | None = None
     cdp: CdpClient | None = None
+    keep_profile_dir = False
     try:
         try:
             proc, browser_path, headless, log_path = launch_debug_browser(
@@ -1501,9 +1502,11 @@ def resolve_candidates_with_browser(
             print("Complete any Sogou verification in the opened browser window if it appears.")
         except Exception as exc:
             detail = f"{type(exc).__name__}: {exc}"
+            keep_profile_dir = True
             for candidate in candidates[:count]:
                 candidate.resolve_status = f"browser_unavailable: {detail}"
             print(f"Browser verification failed: {detail}")
+            print(f"Browser diagnostic files kept at: {profile_dir}")
             print("If an AI tool asks for permission to open a local browser, allow it and rerun this step.")
             return
         try:
@@ -1549,7 +1552,8 @@ def resolve_candidates_with_browser(
             except Exception:
                 pass
         stop_process(proc)
-        shutil.rmtree(profile_dir, ignore_errors=True)
+        if not keep_profile_dir:
+            shutil.rmtree(profile_dir, ignore_errors=True)
 
 
 def resolve_one_candidate(cdp: CdpClient, candidate: Candidate, min_delay: float, max_delay: float) -> None:
@@ -1969,7 +1973,7 @@ def main(argv: list[str]) -> int:
     print(f"Screening pool: {len(screening_pool)} candidates for {args.count} final URLs.")
 
     if not args.no_browser:
-        print("Verifying redirect links in a hidden browser...")
+        print("Verifying redirect links in Chrome...")
         resolve_candidates_with_browser(
             screening_pool,
             count=len(screening_pool),

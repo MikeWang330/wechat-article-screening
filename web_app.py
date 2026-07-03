@@ -2309,8 +2309,8 @@ def run_job_inner(job: Job, payload: dict[str, Any]) -> None:
                 return
             url_count = usable_wechat_url_count()
             if url_count <= 0:
-                job.status = "done"
-                job.summary = "已完成重试，但这批候选仍没有转出可用的微信原文链接。"
+                job.status = "failed"
+                job.summary = "重试没有拿到可用的微信原文链接，请先解决浏览器验证后再试。"
                 job.outputs = collect_output_items(job)
                 return
             if not payload.get("run_mineru"):
@@ -2385,15 +2385,16 @@ def run_job_inner(job: Job, payload: dict[str, Any]) -> None:
             job.outputs = collect_output_items(job)
             return
 
+        url_count = usable_wechat_url_count()
+        job.results = read_result_items(job)
+        if url_count <= 0:
+            job.status = "failed"
+            job.summary = no_url_summary(job)
+            job.append("No usable WeChat URLs were written, so local result preparation was skipped.")
+            job.outputs = collect_output_items(job)
+            return
+
         if not payload.get("run_mineru"):
-            url_count = usable_wechat_url_count()
-            job.results = read_result_items(job)
-            if url_count <= 0:
-                job.status = "done"
-                job.summary = no_url_summary(job)
-                job.append("No usable WeChat URLs were written, so local HTML preparation was skipped.")
-                job.outputs = collect_output_items(job)
-                return
             job.append("Step 2: preparing local HTML files.")
             run_process(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".\\run_html_only.ps1"], job, payload)
             if finish_if_canceled(job):
