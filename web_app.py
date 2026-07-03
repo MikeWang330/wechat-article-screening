@@ -1993,7 +1993,7 @@ def latest_run_dir() -> Path | None:
     return existing_run_path(value)
 
 
-def collect_output_items(job: Job) -> list[dict[str, str]]:
+def collect_output_items(job: Job, include_latest_run: bool = False) -> list[dict[str, str]]:
     outputs: list[dict[str, str]] = []
     add_output_item(outputs, "链接文件", ROOT / "urls.txt")
 
@@ -2010,8 +2010,9 @@ def collect_output_items(job: Job) -> list[dict[str, str]]:
     run_dir = (
         existing_run_path(latest_log_value(job.logs, "Run directory:"))
         or existing_run_path(latest_log_value(job.logs, "Run output:"))
-        or latest_run_dir()
     )
+    if not run_dir and include_latest_run:
+        run_dir = latest_run_dir()
     if run_dir:
         add_output_item(outputs, "运行目录", run_dir)
         markdown_dir = run_dir / "markdown"
@@ -2531,7 +2532,7 @@ class Handler(BaseHTTPRequestHandler):
                 job.logs.append(f"Screened pool CSV: {screened_csv}")
             elif candidate_csv:
                 job.logs.append(f"Candidate CSV: {candidate_csv}")
-            job.outputs = collect_output_items(job)
+            job.outputs = collect_output_items(job, include_latest_run=True)
             job.results = read_result_items(job)
             json_response(self, {"outputs": job.outputs, "results": job.results})
             return
@@ -2619,3 +2620,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
