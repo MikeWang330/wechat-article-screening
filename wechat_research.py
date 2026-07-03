@@ -1477,9 +1477,10 @@ def resolve_candidates_with_browser(
         return
 
     for candidate in candidates[:count]:
-        if "mp.weixin.qq.com" in candidate.sogou_url:
-            candidate.resolved_url = candidate.sogou_url
-            candidate.resolve_status = "direct"
+        if "mp.weixin.qq.com" in candidate.resolved_url:
+            setattr(candidate, "_resolved_url_for_recheck", candidate.resolved_url)
+            candidate.resolved_url = ""
+            candidate.resolve_status = "pending_recheck"
 
     port = free_port()
     profile_dir = browser_work_dir("chrome-research", port)
@@ -1557,9 +1558,19 @@ def resolve_candidates_with_browser(
 
 
 def resolve_one_candidate(cdp: CdpClient, candidate: Candidate, min_delay: float, max_delay: float) -> None:
+    recheck_url = getattr(candidate, "_resolved_url_for_recheck", "")
+    if "mp.weixin.qq.com" in recheck_url:
+        direct_status, direct_url = navigate_and_extract_wechat(cdp, recheck_url, min_delay, max_delay)
+        if direct_url:
+            candidate.resolved_url = direct_url
+        candidate.resolve_status = direct_status
+        return
+
     if "mp.weixin.qq.com" in candidate.sogou_url:
-        candidate.resolved_url = candidate.sogou_url
-        candidate.resolve_status = "direct"
+        direct_status, direct_url = navigate_and_extract_wechat(cdp, candidate.sogou_url, min_delay, max_delay)
+        if direct_url:
+            candidate.resolved_url = direct_url
+        candidate.resolve_status = direct_status
         return
 
     direct_status, direct_url = navigate_and_extract_wechat(cdp, candidate.sogou_url, min_delay, max_delay)
@@ -1615,6 +1626,7 @@ def navigate_and_extract_wechat(
     url: str,
     min_delay: float,
     max_delay: float,
+    allow_html_extract: bool = True,
 ) -> tuple[str, str]:
     cdp.call("Page.navigate", {"url": browser_safe_url(url)}, timeout=20)
     sleep_random(min_delay, max_delay)
@@ -1623,22 +1635,39 @@ def navigate_and_extract_wechat(
 (() => ({
   url: location.href,
   title: document.title,
-  html: document.documentElement.innerHTML.slice(0, 12000)
+  text: document.body ? document.body.innerText.slice(0, 30000) : "",
+  html: document.documentElement.innerHTML.slice(0, 80000),
+  hasContent: !!document.getElementById("js_content")
 }))()
 """,
         timeout=20,
     )
     final_url = (final or {}).get("url", "")
     final_html = (final or {}).get("html", "")
+    final_text = (final or {}).get("text", "")
     if "mp.weixin.qq.com" in final_url:
-        marker = unavailable_wechat_marker(final_html)
+        marker = unavailable_wechat_marker(f"{final_text}\n{final_html}")
         if marker:
             return f"wechat_unavailable: {marker}", ""
+        if not (final or {}).get("hasContent"):
+            return "wechat_unavailable: content_not_found", ""
         return "resolved", final_url
+
+    if not allow_html_extract:
+        return "not_wechat_url", ""
 
     match = re.search(r"https://mp\.weixin\.qq\.com/s/[A-Za-z0-9_-]+", final_html)
     if match:
-        return "resolved_from_html", match.group(0)
+        nested_status, nested_url = navigate_and_extract_wechat(
+            cdp,
+            match.group(0),
+            min_delay,
+            max_delay,
+            allow_html_extract=False,
+        )
+        if nested_url:
+            return "resolved_from_html", nested_url
+        return nested_status, ""
 
     if "antispider" in final_url or "请输入验证码" in final_html:
         return "blocked_by_sogou", ""
