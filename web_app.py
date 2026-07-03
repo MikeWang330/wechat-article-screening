@@ -877,7 +877,7 @@ HTML = r"""<!doctype html>
         <button class="nav-button active" type="button" data-page="workbench">任务台</button>
         <button class="nav-button" type="button" data-page="settings">设置</button>
       </div>
-      <div class="footer-note">只在本机运行。需要分享时，让同事在自己的电脑上启动即可。</div>
+      <div class="footer-note">只在本机运行</div>
     </nav>
     <main class="main">
       <section class="page active" id="page-workbench">
@@ -2252,8 +2252,6 @@ def default_browser_path() -> str:
     explicit = os.environ.get("CHROME_PATH", "").strip()
     candidates = [
         explicit,
-        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
         r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
     ]
@@ -2428,7 +2426,6 @@ def run_process(command: list[str], job: Job, payload: dict[str, Any]) -> None:
     env = os.environ.copy()
     remove_dead_proxy_env(env)
     env["PYTHONUNBUFFERED"] = "1"
-    env["ALLOW_EDGE_BROWSER"] = "1"
     mineru_token = str(payload.get("mineru_token", "")).strip()
     if mineru_token:
         env["MINERU_TOKEN"] = mineru_token
@@ -2608,23 +2605,11 @@ class Handler(BaseHTTPRequestHandler):
         return
 
 
-def lan_ip() -> str:
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-            sock.connect(("8.8.8.8", 80))
-            return sock.getsockname()[0]
-    except OSError:
-        return "127.0.0.1"
-
-
 def main() -> int:
     port = int(os.environ.get("WEB_PORT", "8787"))
-    host = os.environ.get("WEB_HOST", "0.0.0.0")
-    server = ThreadingHTTPServer((host, port), Handler)
+    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     local_url = f"http://127.0.0.1:{port}"
-    network_url = f"http://{lan_ip()}:{port}"
-    print(f"Open locally: {local_url}")
-    print(f"Open on the same network: {network_url}")
+    print(f"Open {local_url}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

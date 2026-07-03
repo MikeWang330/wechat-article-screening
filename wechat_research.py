@@ -1150,21 +1150,11 @@ def find_chrome_candidates() -> list[str]:
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
         r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
     ]
-    allow_edge = os.environ.get("ALLOW_EDGE_BROWSER", "").strip().lower() in {"1", "true", "yes", "on"}
-    if allow_edge or (explicit_browser and "msedge" in explicit_browser.lower()):
-        candidates.extend(
-            [
-                r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-                r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-            ]
-        )
     found_items: list[str] = []
     for item in candidates:
         if item and Path(item).exists():
             found_items.append(item)
     command_names = ["chrome", "google-chrome", "chromium", "chromium-browser"]
-    if allow_edge:
-        command_names.append("msedge")
     for name in command_names:
         found = shutil.which(name)
         if found and found not in found_items:
@@ -1855,7 +1845,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--write-urls", action="store_true", help="Overwrite urls.txt with verified WeChat URLs")
     parser.add_argument("--urls-file", type=Path, default=DEFAULT_URLS_FILE)
     parser.add_argument("--no-browser", action="store_true", help="Skip browser-based Sogou search verification and redirect verification")
-    parser.add_argument("--chrome-path", default=None, help="Optional Chrome or Edge executable path")
+    parser.add_argument("--chrome-path", default=None, help="Optional Chrome executable path")
     parser.add_argument("--sogou-verify-timeout", type=int, default=180, help="Seconds to wait for manual Sogou verification in the opened browser")
     parser.add_argument("--search-cache-dir", type=Path, default=DEFAULT_SEARCH_CACHE_DIR, help="Directory for cached Sogou search result pages")
     parser.add_argument("--cache-ttl-hours", type=float, default=12, help="How long to reuse cached Sogou search pages. Set 0 to disable")
