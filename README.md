@@ -1,128 +1,111 @@
-# 微信公众号文章搜索筛选 + MinerU 批量解析
+# 微信公众号文章筛选 + MinerU 批量解析
 
-这个项目在你的电脑本地运行，用来做两件事：
+这个项目在本地电脑运行，用来完成三件事：
 
-1. 自动搜索、筛选微信公众号文章，并转换成真实 `mp.weixin.qq.com` 链接。
-2. 把公众号文章交给 MinerU 解析，生成 Markdown 文件。
+1. 按关键词搜索微信公众号文章。
+2. 按商业/行业报告标准筛选高价值内容。
+3. 把可用的微信原文链接交给 MinerU，生成本地 Markdown 和 HTML 结果。
 
-搜狗跳转链接依赖本机浏览器复核，所以不建议放到 GitHub Actions 云端运行。每个人跑出来的数据只保存在自己的本地，不会上传到 GitHub。
+默认使用场景：饮料公司的商业分析部门。用户只需要输入研究主题、时间范围和目标篇数，不需要理解底层搜索、验证和转换流程。
 
-## 先准备
+完整筛选标准见 [SCREENING_STANDARD.md](SCREENING_STANDARD.md)。
 
-1. 安装 Python。
-2. 安装依赖：
+## 准备环境
+
+安装 Python 后，在项目目录运行：
 
 ```powershell
 pip install -r requirements.txt
 ```
 
-3. 去 MinerU 获取 Token：
+准备 MinerU Token：
 
 ```text
 https://mineru.net/apiManage/token
 ```
 
-4. 设置 Token，推荐用环境变量：
+推荐用环境变量保存：
 
 ```powershell
 $env:MINERU_TOKEN="你的 MinerU Token"
 ```
 
-也可以在项目目录下创建 `mineru_token.txt`，把 Token 单独放进去。这个文件不会上传到 GitHub。
+也可以创建 `mineru_token.txt`，把 Token 单独放进去。这个文件不会上传到 GitHub。
 
-## AI 用户
+## 启动网页
 
-适合你把这个仓库链接发给 Codex、Claude、ChatGPT、DeepSeek 等 AI，让 AI 在你的电脑上帮你跑：
-
-```text
-https://github.com/MikeWang330/wechat-article-screening
-```
-
-### AI 用户：本地研究记忆
-
-第一次用时，让 AI 先帮你建立本地 `research_memory.json`。它会记录你的长期筛选偏好，比如喜欢什么文章、排除什么内容、找不满时怎么处理。
-
-可以这样说：
-
-```text
-请使用这个仓库：https://github.com/MikeWang330/wechat-article-screening
-请用一问一答的方式，先帮我建立本地 research_memory.json。
-你来问我用途、偏好的文章类型、时间要求、找不满时怎么处理；
-排除什么内容由你根据我的回答自行判断并写入，不用让我列清单。
-```
-
-这份记忆只保存在你的电脑，不会上传 GitHub。不要把 MinerU Token、一次性研究主题或敏感信息写进去。
-
-### AI 用户：自动模式
-
-建好本地研究记忆后，你只需要把新需求告诉 AI。
-
-可以这样说：
-
-```text
-请使用这个仓库：https://github.com/MikeWang330/wechat-article-screening
-帮我在本地运行自动模式。
-我的需求是：2025年至今，找 20 篇 AI 硬件品牌营销案例相关的微信公众号文章。
-我已经准备好了 MinerU Token。
-```
-
-之后再用时，你只要说新的主题和数量即可。除非你主动改要求，AI 和程序都会沿用本地筛选习惯。
-
-自动模式默认规则：
-
-- 按你的 `research_memory.json` 和本次需求来筛选。
-- 如果没有写时间范围，默认看最近一年。
-- 始终使用通用筛选，不需要选择行业模式。
-- 如果符合要求的文章不够，宁可少给，也不要拼凑弱相关内容。
-- 如果文章已删除、不可查看或没有正文，会自动跳过，不生成无效 Markdown。
-
-### AI 用户：手动模式
-
-如果你已经自己找好了公众号链接，直接把链接发给 AI，并说：
-
-```text
-请把这些微信公众号链接写入 urls.txt，然后运行手动模式解析。
-```
-
-AI 应该把链接放进 `urls.txt`，每行一个，然后运行：
+在项目目录运行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\run_manual.ps1
+python web_app.py
 ```
 
-## 本地用户
+然后打开：
 
-适合你自己打开 PowerShell，在项目目录里运行。
-
-### 本地用户：自动模式
-
-最简单命令：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 品牌案例 赞助商" -Count 20
+```text
+http://127.0.0.1:8787
 ```
 
-快速模式：
+网页里只需要做几件事：
+
+- 输入搜索关键词。
+- 选择时间范围，例如过去一年、过去三个月。
+- 填目标篇数。
+- 在设置页填 LLM API 和 MinerU Token。
+- 点击“开始任务”。
+
+LLM 只用于扩充关键词。后续搜索、筛选、微信链接验证、本地 HTML 准备和 MinerU 转换，都由本地程序执行。
+
+## 局域网试用
+
+如果你的电脑开着，同一个网络里的同事也可以访问你的网页。
+
+启动后，终端会显示类似：
+
+```text
+Open on the same network: http://10.x.x.x:8787
+```
+
+把这个地址发给同事即可。
+
+注意：
+
+- 所有任务实际都跑在你的电脑上。
+- 如果搜狗要求验证，浏览器窗口会弹在你的电脑上，需要你完成验证。
+- 一次建议只让一个人运行任务，避免排队和触发风控。
+- 如果同事打不开，通常是 Windows 防火墙拦截了 Python，需要允许专用网络访问。
+
+## 搜狗验证
+
+项目不会绕过验证码。
+
+如果搜狗微信搜索要求验证，程序会打开 Chrome 或 Edge 窗口。请在窗口里完成验证，验证后不要立刻关闭窗口，程序会继续采集结果。
+
+如果已经筛出候选文章，但没有拿到微信原文链接，可以在网页里点“重试验证”。这会复用候选表，只重新尝试把候选链接转成 `mp.weixin.qq.com` 原文链接。
+
+## 自动模式命令
+
+不使用网页时，也可以直接运行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 品牌案例 赞助商" -Count 20 -Mode fast
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "百岁山 降价" -Count 20
 ```
 
 指定时间范围：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 品牌案例 赞助商" -Count 20 -StartDate "2025-01-01" -EndDate "2026-07-02"
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "电解质水 世界杯 营销" -Count 20 -StartDate "2025-07-01" -EndDate "2026-07-03"
 ```
 
-只生成 `urls.txt`，先不跑 MinerU：
+只生成 `urls.txt`，暂时不跑 MinerU：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "世界杯营销 品牌案例 赞助商" -Count 20 -OnlyUrls
+powershell -ExecutionPolicy Bypass -File .\run_auto.ps1 -Topic "饮料 行业分析" -Count 20 -OnlyUrls
 ```
 
-### 本地用户：手动模式
+## 手动 URL 模式
 
-先创建 `urls.txt`，每行放一个微信公众号文章链接：
+如果你已经有微信公众号文章链接，创建 `urls.txt`：
 
 ```text
 https://mp.weixin.qq.com/s/xxxx
@@ -135,45 +118,80 @@ https://mp.weixin.qq.com/s/yyyy
 powershell -ExecutionPolicy Bypass -File .\run_manual.ps1
 ```
 
-## 输出在哪里
+## 输出位置
 
-每次 MinerU 解析都会保存到新的运行目录：
-
-```text
-runs/
-  20260702-120000-urls/
-    markdown/
-    result.json
-    failed_urls.txt
-    successful_urls.txt
-    summary.md
-```
-
-你真正要看的 Markdown 文件在：
-
-```text
-runs/某次运行的目录/markdown/
-```
-
-如果不知道最新一次是哪一个，看项目根目录里的：
-
-```text
-latest_run.txt
-```
-
-自动搜索阶段会生成候选清单：
+搜索候选：
 
 ```text
 candidates/
 ```
 
-长期索引保存在：
+最终解析结果：
+
+```text
+runs/
+  20260703-120000-urls/
+    markdown/
+    html/
+    summary.md
+    result.json
+    successful_urls.txt
+    failed_urls.txt
+```
+
+最新一次运行目录会写入：
+
+```text
+latest_run.txt
+```
+
+长期索引会保存到：
 
 ```text
 library/articles_index.csv
 ```
 
+## 筛选逻辑
+
+程序默认按商业分析用途筛选，不会为了凑数量强行加入弱相关文章。
+
+优先保留：
+
+- 案例复盘
+- 行业分析
+- 数据报告
+- 深度访谈
+- 策略拆解
+- 有市场、渠道、价格带、竞品、消费者、终端、供应链信息的文章
+
+默认排除：
+
+- 招聘、课程、资料包下载
+- 纯新闻快讯、活动预告、会议通知
+- 浅层榜单、低价值转载
+- 没有正文或内容过短的文章
+
+如果目标是 20 篇，但只找到 12 篇高质量文章，程序会返回 12 篇，而不是补弱相关内容。
+
 ## 常见问题
+
+### 为什么数量经常不够？
+
+因为最终只保留同时满足三件事的文章：
+
+1. 搜索阶段能找到。
+2. 筛选阶段足够相关。
+3. 验证阶段能转成可访问的微信原文链接。
+
+任意一步失败，都会被排除。
+
+### 为什么会卡在验证微信链接？
+
+这一步需要本机浏览器打开搜狗跳转链接。如果浏览器启动失败、搜狗要求验证、或链接已失效，就可能拿不到微信原文链接。
+
+可以稍后重试，或在网页里点“重试验证”。
+
+### MinerU 提示额度用完怎么办？
 
 如果看到：
 
@@ -181,36 +199,15 @@ library/articles_index.csv
 daily web crawl limit reached max: 100 tasks, submit tomorrow
 ```
 
-意思是 MinerU 当天网页抓取额度已经用完了，不是程序坏了。第二天额度恢复后，可以直接跑手动模式继续解析已有的 `urls.txt`：
+说明 MinerU 当天额度用完。第二天额度恢复后，可以继续运行：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\run_manual.ps1
 ```
 
-如果上一次 MinerU 有失败链接，可以重试失败项：
+### 哪些文件不会上传？
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\run_retry_failed.ps1
-```
-
-如果某篇微信公众号文章已经删除、违规不可查看、没有正文，程序会写进 `failed_urls.txt`，不会放进最终 Markdown。
-
-## 给 AI 的 Skill 文件
-
-这个仓库可以直接作为微信公众号文章筛选 Skill 使用：
-
-```text
-SKILL.md
-agents/openai.yaml
-references/universal-prompt.md
-```
-
-- `SKILL.md`：给 Codex 这类 Skill 系统使用。
-- `references/universal-prompt.md`：可以复制给 Claude、ChatGPT、DeepSeek 等 AI 使用。
-
-## 本地数据不会上传
-
-这些文件和目录属于个人运行数据，已经被 `.gitignore` 忽略：
+这些属于本地运行数据，已被 `.gitignore` 忽略：
 
 - `mineru_token.txt`
 - `research_memory.json`

@@ -9,6 +9,8 @@ Use this skill to help a user find useful WeChat public-account articles, especi
 
 The preferred handoff is `run_auto.ps1`, which searches, screens, resolves real WeChat article links, writes `urls.txt`, and then runs MinerU. Only produce a manual `urls.txt` workflow when the user already provides article URLs or explicitly asks not to use automatic mode.
 
+Default product assumption: the user is a beverage-company business analysis team member who does not understand terminals. Favor simple local-web workflows, business-report usefulness, and clear recovery paths over exposing low-level parameters.
+
 For a portable prompt that can be pasted into Claude, ChatGPT, DeepSeek, or another AI assistant, use `references/universal-prompt.md`.
 
 ## Principle
@@ -35,7 +37,10 @@ Use these rules:
 - Add `-OnlyUrls` only when the user wants to stop after generating `urls.txt` and not run MinerU.
 - Use graded relevance. Prefer exact matches first, then articles that are useful for writing a report on the topic. If exact matches are sparse, include clearly useful core-related context instead of returning an unnecessarily tiny list.
 - Keep runtime bounded. In `fast` mode, use a screening pool no larger than `count * 2`. In `slow` mode, allow broader search up to about `count * 3`, but do not keep launching manual extra rounds indefinitely just to force an exact count.
+- Search should be adaptive: try one keyword round at a time, collect a small number of results, screen immediately, and stop when the target candidate pool is reached or two consecutive keyword rounds add no screenable candidates.
 - Stay on the high-level project entry point. Do not bypass `run_auto.ps1` to call low-level scripts with larger query limits unless the user explicitly asks for a custom research run.
+- If Sogou Weixin asks for verification, automatic mode may open a visible Chrome/Edge window. Tell the user to complete the verification in that window and leave it open; the program will continue collecting results after verification passes.
+- Do not bypass Sogou verification or solve anti-spider challenges without the user's direct action. If verification blocks the run, preserve the candidate CSV and use retry verification or manual URL intake.
 - If automatic mode returns fewer usable articles than requested, report the shortfall and use the best verified articles. Do not keep expanding date ranges, adding unrelated keywords, or manually stitching weak results just to reach the requested number.
 
 After asking clarifying questions, either run the command or show the exact command the user should run. Keep the command simple; do not expose low-level research parameters unless the user asks.
@@ -111,6 +116,8 @@ Examples:
 ## Screening Rubric
 
 Score qualitatively first, then numerically if needed.
+
+For the default beverage-company business-analysis preset, judge whether the article would help write a business or industry report. Good signals include cases, industry analysis, data reports, interviews, strategy breakdowns, market share, channels, retail terminals, price bands, consumers, competitors, beverage or FMCG context, and evidence such as data, interviews, charts, or company details.
 
 Strong:
 

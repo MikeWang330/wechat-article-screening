@@ -1,16 +1,45 @@
 {
-  "default_purpose": "商业分析",
+  "user_preset": "饮料公司商业分析部门",
+  "default_purpose": "为饮料公司撰写商业/行业报告",
   "preferred_article_types": [
     "案例复盘",
     "行业分析",
-    "数据报告"
+    "数据报告",
+    "深度访谈",
+    "策略拆解"
   ],
   "default_quality_bar": "balanced",
-  "default_exclusions": [],
+  "default_exclusions": [
+    "招聘信息",
+    "课程推广",
+    "资料包下载",
+    "纯新闻快讯",
+    "简单新闻转述",
+    "活动预告",
+    "会议通知",
+    "直播预告",
+    "浅层榜单",
+    "低价值转载",
+    "无实质分析的官方宣传",
+    "缺少正文或内容过短的文章"
+  ],
   "sparse_result_policy": "prefer_fewer_high_quality",
   "default_mode": "slow",
   "default_min_rating": "maybe",
   "default_recent_days": 365,
-  "default_extra_keywords": [],
-  "notes": "复制为 research_memory.json 后，让 AI 通过一问一答填写。排除项由 AI 根据你的回答归纳。不要把 Token、一次性 topic 或敏感项写进来。"
+  "default_extra_keywords": [
+    "案例",
+    "复盘",
+    "分析",
+    "报告",
+    "访谈",
+    "策略",
+    "趋势",
+    "洞察",
+    "数据",
+    "渠道",
+    "消费者",
+    "终端"
+  ],
+  "notes": "默认用户是不懂终端的饮料公司商业分析同事。只让用户输入主题、时间范围和目标篇数；程序负责关键词扩展、搜索、筛选、验证和本地文件准备。不要把 Token、一次性 topic 或敏感项写进来。"
 }

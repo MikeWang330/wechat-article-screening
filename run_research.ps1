@@ -21,7 +21,23 @@ param(
 
     [string]$StartDate = "",
 
-    [string]$EndDate = ""
+    [string]$EndDate = "",
+
+    [int]$SogouVerifyTimeout = 180,
+
+    [switch]$NoBrowser,
+
+    [string]$ChromePath = "",
+
+    [double]$MinDelay = 1.0,
+
+    [double]$MaxDelay = 3.0,
+
+    [double]$CacheTtlHours = 12,
+
+    [switch]$ContinueAfterBlock,
+
+    [int]$StopAfterEmptyRounds = 2
 )
 
 $ErrorActionPreference = "Stop"
@@ -64,6 +80,14 @@ if ($ParamsFile) {
     $value = Get-JsonValue $paramsData "min_rating"; if ($value -in @("weak", "maybe", "strong")) { $MinRating = [string]$value }
     $value = Get-JsonValue $paramsData "start_date"; if ($null -ne $value) { $StartDate = [string]$value }
     $value = Get-JsonValue $paramsData "end_date"; if ($null -ne $value) { $EndDate = [string]$value }
+    $value = Get-JsonValue $paramsData "sogou_verify_timeout"; if ($null -ne $value) { $SogouVerifyTimeout = [int]$value }
+    $value = Get-JsonValue $paramsData "no_browser"; if ($null -ne $value) { $NoBrowser = [bool]$value }
+    $value = Get-JsonValue $paramsData "chrome_path"; if ($null -ne $value) { $ChromePath = [string]$value }
+    $value = Get-JsonValue $paramsData "min_delay"; if ($null -ne $value) { $MinDelay = [double]$value }
+    $value = Get-JsonValue $paramsData "max_delay"; if ($null -ne $value) { $MaxDelay = [double]$value }
+    $value = Get-JsonValue $paramsData "cache_ttl_hours"; if ($null -ne $value) { $CacheTtlHours = [double]$value }
+    $value = Get-JsonValue $paramsData "continue_after_block"; if ($null -ne $value) { $ContinueAfterBlock = [bool]$value }
+    $value = Get-JsonValue $paramsData "stop_after_empty_rounds"; if ($null -ne $value) { $StopAfterEmptyRounds = [int]$value }
     $value = Get-JsonValue $paramsData "write_urls"; if ($null -ne $value) { $NoWriteUrls = -not [bool]$value }
 }
 
@@ -108,6 +132,14 @@ $pythonParams = [ordered]@{
     min_rating = $MinRating
     start_date = $StartDate
     end_date = $EndDate
+    sogou_verify_timeout = $SogouVerifyTimeout
+    no_browser = [bool]$NoBrowser
+    chrome_path = $ChromePath
+    min_delay = $MinDelay
+    max_delay = $MaxDelay
+    cache_ttl_hours = $CacheTtlHours
+    continue_after_block = [bool]$ContinueAfterBlock
+    stop_after_empty_rounds = $StopAfterEmptyRounds
     write_urls = (-not $NoWriteUrls)
 }
 $pythonParams | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $pythonParamsPath -Encoding UTF8
