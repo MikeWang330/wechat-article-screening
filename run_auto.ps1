@@ -1,6 +1,8 @@
 param(
     [string]$Topic = "",
 
+    [string]$ParamsFile = "",
+
     [int]$Count = 20,
 
     [string]$StartDate = "",
@@ -28,11 +30,80 @@ param(
     [ValidateSet("all", "search", "mineru", "retry")]
     [string]$Stage = "all",
 
+    [int]$SogouVerifyTimeout = 180,
+
+    [switch]$NoBrowser,
+
+    [string]$ChromePath = "",
+
+    [double]$MinDelay = 1.0,
+
+    [double]$MaxDelay = 3.0,
+
+    [double]$CacheTtlHours = 12,
+
+    [switch]$ContinueAfterBlock,
+
+    [int]$StopAfterEmptyRounds = 2,
+
     [switch]$OnlyUrls
 )
 
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
+$boundParameters = @{} + $PSBoundParameters
+
+try {
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    $OutputEncoding = [System.Text.Encoding]::UTF8
+    $env:PYTHONIOENCODING = "utf-8"
+} catch {
+}
+
+function Get-JsonValue {
+    param(
+        [object]$Object,
+        [string]$Name
+    )
+
+    $property = $Object.PSObject.Properties[$Name]
+    if (-not $property) {
+        return $null
+    }
+    if ($property.Value -is [string] -and $property.Value -eq "") {
+        return $null
+    }
+    return $property.Value
+}
+
+if ($ParamsFile) {
+    if (-not (Test-Path -LiteralPath $ParamsFile)) {
+        throw "ParamsFile was not found: $ParamsFile"
+    }
+    $paramsData = Get-Content -LiteralPath $ParamsFile -Raw -Encoding UTF8 | ConvertFrom-Json
+    $value = Get-JsonValue $paramsData "topic"; if ($null -ne $value) { $Topic = [string]$value; $boundParameters["Topic"] = $true }
+    $value = Get-JsonValue $paramsData "count"; if ($null -ne $value) { $Count = [int]$value; $boundParameters["Count"] = $true }
+    $value = Get-JsonValue $paramsData "start_date"; if ($null -ne $value) { $StartDate = [string]$value; $boundParameters["StartDate"] = $true }
+    $value = Get-JsonValue $paramsData "end_date"; if ($null -ne $value) { $EndDate = [string]$value; $boundParameters["EndDate"] = $true }
+    $value = Get-JsonValue $paramsData "min_rating"; if ($value -in @("weak", "maybe", "strong")) { $MinRating = [string]$value; $boundParameters["MinRating"] = $true }
+    $value = Get-JsonValue $paramsData "extra_keywords"; if ($null -ne $value) { $ExtraKeywords = [string]$value; $boundParameters["ExtraKeywords"] = $true }
+    $value = Get-JsonValue $paramsData "pool_size"; if ($null -ne $value) { $PoolSize = [int]$value; $boundParameters["PoolSize"] = $true }
+    $value = Get-JsonValue $paramsData "mode"; if ($value -in @("fast", "slow")) { $Mode = [string]$value; $boundParameters["Mode"] = $true }
+    $value = Get-JsonValue $paramsData "recent_days"; if ($null -ne $value) { $RecentDays = [int]$value; $boundParameters["RecentDays"] = $true }
+    $value = Get-JsonValue $paramsData "exclude_keywords"; if ($null -ne $value) { $ExcludeKeywords = [string]$value; $boundParameters["ExcludeKeywords"] = $true }
+    $value = Get-JsonValue $paramsData "memory_file"; if ($null -ne $value) { $MemoryFile = [string]$value; $boundParameters["MemoryFile"] = $true }
+    $value = Get-JsonValue $paramsData "no_memory"; if ($null -ne $value) { $NoMemory = [bool]$value; $boundParameters["NoMemory"] = $true }
+    $value = Get-JsonValue $paramsData "stage"; if ($value -in @("all", "search", "mineru", "retry")) { $Stage = [string]$value; $boundParameters["Stage"] = $true }
+    $value = Get-JsonValue $paramsData "sogou_verify_timeout"; if ($null -ne $value) { $SogouVerifyTimeout = [int]$value; $boundParameters["SogouVerifyTimeout"] = $true }
+    $value = Get-JsonValue $paramsData "no_browser"; if ($null -ne $value) { $NoBrowser = [bool]$value; $boundParameters["NoBrowser"] = $true }
+    $value = Get-JsonValue $paramsData "chrome_path"; if ($null -ne $value) { $ChromePath = [string]$value; $boundParameters["ChromePath"] = $true }
+    $value = Get-JsonValue $paramsData "min_delay"; if ($null -ne $value) { $MinDelay = [double]$value; $boundParameters["MinDelay"] = $true }
+    $value = Get-JsonValue $paramsData "max_delay"; if ($null -ne $value) { $MaxDelay = [double]$value; $boundParameters["MaxDelay"] = $true }
+    $value = Get-JsonValue $paramsData "cache_ttl_hours"; if ($null -ne $value) { $CacheTtlHours = [double]$value; $boundParameters["CacheTtlHours"] = $true }
+    $value = Get-JsonValue $paramsData "continue_after_block"; if ($null -ne $value) { $ContinueAfterBlock = [bool]$value; $boundParameters["ContinueAfterBlock"] = $true }
+    $value = Get-JsonValue $paramsData "stop_after_empty_rounds"; if ($null -ne $value) { $StopAfterEmptyRounds = [int]$value; $boundParameters["StopAfterEmptyRounds"] = $true }
+    $value = Get-JsonValue $paramsData "only_urls"; if ($null -ne $value) { $OnlyUrls = [bool]$value; $boundParameters["OnlyUrls"] = $true }
+}
 
 function Join-Terms {
     param([object[]]$Values)
@@ -54,7 +125,8 @@ function Join-Terms {
             if ($null -eq $item) {
                 continue
             }
-            foreach ($part in ($item.ToString() -split "[,，;；]")) {
+            $normalizedItem = $item.ToString().Replace([char]0xFF0C, ",").Replace([char]0xFF1B, ";")
+            foreach ($part in ($normalizedItem -split "[,;]")) {
                 $term = $part.Trim()
                 if ($term -and -not $seen.ContainsKey($term)) {
                     $seen[$term] = $true
@@ -88,17 +160,17 @@ if (-not $NoMemory -and $MemoryFile -and (Test-Path -LiteralPath $MemoryFile)) {
         $memory = Get-Content -LiteralPath $MemoryFile -Raw -Encoding UTF8 | ConvertFrom-Json
         Write-Host "Loaded local research memory: $MemoryFile"
 
-        if (-not $PSBoundParameters.ContainsKey("Mode") -and $memory.default_mode -in @("fast", "slow")) {
+        if (-not $boundParameters.ContainsKey("Mode") -and $memory.default_mode -in @("fast", "slow")) {
             $Mode = $memory.default_mode
         }
-        if (-not $PSBoundParameters.ContainsKey("MinRating") -and $memory.default_min_rating -in @("weak", "maybe", "strong")) {
+        if (-not $boundParameters.ContainsKey("MinRating") -and $memory.default_min_rating -in @("weak", "maybe", "strong")) {
             $MinRating = $memory.default_min_rating
         }
-        if (-not $PSBoundParameters.ContainsKey("RecentDays") -and $memory.default_recent_days) {
+        if (-not $boundParameters.ContainsKey("RecentDays") -and $memory.default_recent_days) {
             $RecentDays = [int]$memory.default_recent_days
         }
 
-        $memoryExtra = Get-MemoryValues $memory @("preferred_article_types", "default_extra_keywords", "include_keywords")
+        $memoryExtra = Get-MemoryValues $memory @("include_keywords")
         if ($memoryExtra.Count -gt 0) {
             $ExtraKeywords = Join-Terms @($ExtraKeywords, $memoryExtra)
         }
@@ -112,9 +184,8 @@ if (-not $NoMemory -and $MemoryFile -and (Test-Path -LiteralPath $MemoryFile)) {
     }
 }
 
-Write-Host "Auto mode tip: give a detailed topic when possible, for example: topic + date range + target type."
-Write-Host "Auto mode defaults: Screening=general, MinRating=$MinRating, RecentDays=$RecentDays, Stage=$Stage, Mode=$Mode."
-Write-Host "Quality rule: if there are not enough accurate articles, the program returns fewer instead of padding weak matches."
+Write-Host "Auto mode: Stage=$Stage, Mode=$Mode, RecentDays=$RecentDays."
+Write-Host "Quality rule: return accurate results only; do not pad weak matches."
 
 if ($Stage -eq "retry") {
     Write-Host "Auto mode retry: rerunning the failed URLs from the latest run..."
@@ -155,6 +226,14 @@ $researchParams = [ordered]@{
     extra_keywords = $ExtraKeywords
     exclude_keywords = $ExcludeKeywords
     pool_size = $PoolSize
+    sogou_verify_timeout = $SogouVerifyTimeout
+    no_browser = [bool]$NoBrowser
+    chrome_path = $ChromePath
+    min_delay = $MinDelay
+    max_delay = $MaxDelay
+    cache_ttl_hours = $CacheTtlHours
+    continue_after_block = [bool]$ContinueAfterBlock
+    stop_after_empty_rounds = $StopAfterEmptyRounds
     write_urls = $true
 }
 $researchParams | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $researchParamsPath -Encoding UTF8
@@ -173,6 +252,16 @@ if ($LASTEXITCODE -ne 0) {
 
 if ($OnlyUrls -or $Stage -eq "search") {
     Write-Host "Auto mode finished. urls.txt is ready."
+    exit 0
+}
+
+$usableUrls = @()
+if (Test-Path -LiteralPath "urls.txt") {
+    $usableUrls = Get-Content -LiteralPath "urls.txt" -Encoding UTF8 | Where-Object { $_ -match "mp\.weixin\.qq\.com" }
+}
+if ($usableUrls.Count -eq 0) {
+    Write-Host "Auto mode stopped before MinerU: no usable WeChat URLs were written to urls.txt."
+    Write-Host "Check candidates/ for the screened search results, then retry after browser verification works or add URLs manually."
     exit 0
 }
 

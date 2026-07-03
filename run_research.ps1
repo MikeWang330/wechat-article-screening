@@ -21,27 +21,74 @@ param(
 
     [string]$StartDate = "",
 
-    [string]$EndDate = ""
+    [string]$EndDate = "",
+
+    [int]$SogouVerifyTimeout = 180,
+
+    [switch]$NoBrowser,
+
+    [string]$ChromePath = "",
+
+    [double]$MinDelay = 1.0,
+
+    [double]$MaxDelay = 3.0,
+
+    [double]$CacheTtlHours = 12,
+
+    [switch]$ContinueAfterBlock,
+
+    [int]$StopAfterEmptyRounds = 2
 )
 
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
+
+try {
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    $OutputEncoding = [System.Text.Encoding]::UTF8
+    $env:PYTHONIOENCODING = "utf-8"
+} catch {
+}
+
+function Get-JsonValue {
+    param(
+        [object]$Object,
+        [string]$Name
+    )
+
+    $property = $Object.PSObject.Properties[$Name]
+    if (-not $property) {
+        return $null
+    }
+    if ($property.Value -is [string] -and $property.Value -eq "") {
+        return $null
+    }
+    return $property.Value
+}
 
 if ($ParamsFile) {
     if (-not (Test-Path -LiteralPath $ParamsFile)) {
         throw "ParamsFile was not found: $ParamsFile"
     }
     $paramsData = Get-Content -LiteralPath $ParamsFile -Raw -Encoding UTF8 | ConvertFrom-Json
-    if ($paramsData.topic) { $Topic = [string]$paramsData.topic }
-    if ($paramsData.count) { $Count = [int]$paramsData.count }
-    if ($paramsData.pool_size) { $PoolSize = [int]$paramsData.pool_size }
-    if ($paramsData.mode -in @("fast", "slow")) { $Mode = [string]$paramsData.mode }
-    if ($paramsData.extra_keywords) { $ExtraKeywords = [string]$paramsData.extra_keywords }
-    if ($paramsData.exclude_keywords) { $ExcludeKeywords = [string]$paramsData.exclude_keywords }
-    if ($paramsData.min_rating -in @("weak", "maybe", "strong")) { $MinRating = [string]$paramsData.min_rating }
-    if ($paramsData.start_date) { $StartDate = [string]$paramsData.start_date }
-    if ($paramsData.end_date) { $EndDate = [string]$paramsData.end_date }
-    if ($null -ne $paramsData.write_urls) { $NoWriteUrls = -not [bool]$paramsData.write_urls }
+    $value = Get-JsonValue $paramsData "topic"; if ($null -ne $value) { $Topic = [string]$value }
+    $value = Get-JsonValue $paramsData "count"; if ($null -ne $value) { $Count = [int]$value }
+    $value = Get-JsonValue $paramsData "pool_size"; if ($null -ne $value) { $PoolSize = [int]$value }
+    $value = Get-JsonValue $paramsData "mode"; if ($value -in @("fast", "slow")) { $Mode = [string]$value }
+    $value = Get-JsonValue $paramsData "extra_keywords"; if ($null -ne $value) { $ExtraKeywords = [string]$value }
+    $value = Get-JsonValue $paramsData "exclude_keywords"; if ($null -ne $value) { $ExcludeKeywords = [string]$value }
+    $value = Get-JsonValue $paramsData "min_rating"; if ($value -in @("weak", "maybe", "strong")) { $MinRating = [string]$value }
+    $value = Get-JsonValue $paramsData "start_date"; if ($null -ne $value) { $StartDate = [string]$value }
+    $value = Get-JsonValue $paramsData "end_date"; if ($null -ne $value) { $EndDate = [string]$value }
+    $value = Get-JsonValue $paramsData "sogou_verify_timeout"; if ($null -ne $value) { $SogouVerifyTimeout = [int]$value }
+    $value = Get-JsonValue $paramsData "no_browser"; if ($null -ne $value) { $NoBrowser = [bool]$value }
+    $value = Get-JsonValue $paramsData "chrome_path"; if ($null -ne $value) { $ChromePath = [string]$value }
+    $value = Get-JsonValue $paramsData "min_delay"; if ($null -ne $value) { $MinDelay = [double]$value }
+    $value = Get-JsonValue $paramsData "max_delay"; if ($null -ne $value) { $MaxDelay = [double]$value }
+    $value = Get-JsonValue $paramsData "cache_ttl_hours"; if ($null -ne $value) { $CacheTtlHours = [double]$value }
+    $value = Get-JsonValue $paramsData "continue_after_block"; if ($null -ne $value) { $ContinueAfterBlock = [bool]$value }
+    $value = Get-JsonValue $paramsData "stop_after_empty_rounds"; if ($null -ne $value) { $StopAfterEmptyRounds = [int]$value }
+    $value = Get-JsonValue $paramsData "write_urls"; if ($null -ne $value) { $NoWriteUrls = -not [bool]$value }
 }
 
 if (-not $Topic) {
@@ -85,6 +132,14 @@ $pythonParams = [ordered]@{
     min_rating = $MinRating
     start_date = $StartDate
     end_date = $EndDate
+    sogou_verify_timeout = $SogouVerifyTimeout
+    no_browser = [bool]$NoBrowser
+    chrome_path = $ChromePath
+    min_delay = $MinDelay
+    max_delay = $MaxDelay
+    cache_ttl_hours = $CacheTtlHours
+    continue_after_block = [bool]$ContinueAfterBlock
+    stop_after_empty_rounds = $StopAfterEmptyRounds
     write_urls = (-not $NoWriteUrls)
 }
 $pythonParams | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $pythonParamsPath -Encoding UTF8

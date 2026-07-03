@@ -26,6 +26,7 @@ import socket
 import struct
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -39,6 +40,7 @@ import requests
 SOGOU_SEARCH_URL = "https://weixin.sogou.com/weixin"
 DEFAULT_OUTPUT_DIR = Path("candidates")
 DEFAULT_URLS_FILE = Path("urls.txt")
+DEFAULT_SEARCH_CACHE_DIR = Path("work") / "sogou-search-cache"
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -81,6 +83,74 @@ VALUE_TERMS = [
     "新变量",
     "变局",
     "重构",
+]
+ARTICLE_TYPE_TERMS = [
+    "案例复盘",
+    "行业分析",
+    "数据报告",
+    "深度访谈",
+    "策略拆解",
+    "案例",
+    "复盘",
+    "分析",
+    "报告",
+    "访谈",
+    "拆解",
+]
+BUSINESS_ANALYSIS_TERMS = [
+    "市场",
+    "行业",
+    "商业",
+    "竞争",
+    "竞品",
+    "渠道",
+    "终端",
+    "价格带",
+    "份额",
+    "销量",
+    "增长",
+    "消费者",
+    "用户",
+    "人群",
+    "场景",
+    "策略",
+    "投放",
+    "传播",
+    "供应链",
+]
+EVIDENCE_TERMS = [
+    "数据",
+    "调研",
+    "样本",
+    "同比",
+    "环比",
+    "增长率",
+    "渗透率",
+    "市场份额",
+    "销售额",
+    "销量",
+    "财报",
+    "图表",
+    "报告",
+    "访谈",
+]
+BEVERAGE_COMPANY_TERMS = [
+    "饮料",
+    "食品饮料",
+    "快消",
+    "瓶装水",
+    "包装水",
+    "矿泉水",
+    "纯净水",
+    "电解质水",
+    "功能饮料",
+    "茶饮",
+    "咖啡",
+    "便利店",
+    "商超",
+    "货架",
+    "经销商",
+    "SKU",
 ]
 BRAND_CASE_TERMS = [
     "品牌",
@@ -130,6 +200,9 @@ LOW_VALUE_TERMS = [
     "法律",
     "课程",
     "直播",
+    "体育战报",
+    "赛程",
+    "比分",
 ]
 GENERAL_QUERY_SUFFIXES = [
     "案例",
@@ -144,6 +217,10 @@ GENERAL_QUERY_SUFFIXES = [
     "策略",
     "行业",
     "方案",
+    "数据",
+    "访谈",
+    "渠道",
+    "消费者",
 ]
 BRAND_INTENT_TERMS = [
     "营销",
@@ -246,6 +323,61 @@ def strip_tags(value: str) -> str:
     return re.sub(r"\s+", " ", html.unescape(value)).strip()
 
 
+UNAVAILABLE_WECHAT_MARKERS = [
+    "该内容已被发布者删除",
+    "此内容已被发布者删除",
+    "该内容已被删除",
+    "此内容已被删除",
+    "此内容因违规无法查看",
+    "该内容因违规无法查看",
+    "此内容已被投诉并经审核",
+    "该公众号已被封禁",
+    "此账号已被封",
+    "该公众号已迁移",
+    "原账号迁移时未将文章素材同步至新账号",
+    "该链接已不可访问",
+    "链接已过期",
+    "文章不存在",
+    "内容不存在",
+    "参数错误",
+    "该内容无法查看",
+    "此内容无法查看",
+]
+
+
+SOGOU_BLOCK_MARKERS = [
+    "antispider",
+    "请输入验证码",
+    "验证码",
+    "您的访问过于频繁",
+    "异常访问",
+    "用户您好",
+]
+
+
+class SogouSearchBlockedError(RuntimeError):
+    """Raised when Sogou returns an anti-spider page instead of search results."""
+
+
+def unavailable_wechat_marker(value: str) -> str:
+    compact = normalize_text(strip_tags(value))
+    for marker in UNAVAILABLE_WECHAT_MARKERS:
+        if normalize_text(marker) in compact:
+            return marker
+    return ""
+
+
+def sogou_block_marker(value: str) -> str:
+    compact = normalize_text(strip_tags(value))
+    lower_value = value.lower()
+    for marker in SOGOU_BLOCK_MARKERS:
+        if marker == "antispider" and marker in lower_value:
+            return marker
+        if normalize_text(marker) in compact:
+            return marker
+    return ""
+
+
 def safe_name(value: str, fallback: str = "research") -> str:
     value = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", value).strip(" ._")
     value = re.sub(r"\s+", "_", value)
@@ -271,6 +403,59 @@ def years_from_range(start_date: dt.date | None, end_date: dt.date | None) -> li
     return [str(year) for year in range(start_year, end_year + 1)]
 
 
+def contains_year(value: str) -> bool:
+    return bool(re.search(r"20\d{2}", value))
+
+
+def query_angle_terms(extra_keywords: str, topic: str, limit: int = 2) -> list[str]:
+    topic_compact = normalize_text(topic)
+    generic_terms = {
+        "品牌",
+        "活动",
+        "饮料",
+        "市场营销",
+        "品牌营销",
+        "传播",
+        "促销",
+        "合作",
+        "曝光",
+        "销量",
+        "行业",
+        "方案",
+        "案例",
+        "复盘",
+        "分析",
+        "报告",
+    }
+    terms: list[str] = []
+    seen: set[str] = set()
+    for term in split_keywords(extra_keywords):
+        compact = normalize_text(term)
+        if not compact or compact in seen:
+            continue
+        if compact in generic_terms or compact in topic_compact:
+            continue
+        terms.append(term)
+        seen.add(compact)
+        if len(terms) >= limit:
+            break
+    return terms
+
+
+def year_topic_variants(topic: str, years: list[str]) -> list[str]:
+    if len(years) != 1:
+        return []
+    year = years[0]
+    if year in topic:
+        return []
+    variants: list[str] = []
+    for token in split_keywords(topic):
+        if "世界杯" in token and not contains_year(token):
+            variants.append(topic.replace(token, f"{year}{token}", 1))
+            break
+    return variants
+
+
 def generate_queries(
     topic: str,
     extra_keywords: str,
@@ -279,25 +464,27 @@ def generate_queries(
     end_date: dt.date | None = None,
 ) -> list[str]:
     years = years_from_range(start_date, end_date)
-    suffixes = list(GENERAL_QUERY_SUFFIXES)
+    topic = re.sub(r"\s+", " ", topic).strip()
+    primary_year = years[-1] if years else ""
+    angle_terms = query_angle_terms(extra_keywords, topic)
+    fallback_terms = [
+        term
+        for term in ["案例", "分析", "复盘", "报告", "策略", "数据", "消费者", "渠道"]
+        if term not in angle_terms and term not in topic
+    ]
 
-    parts = [topic.strip()]
-    for year in years:
-        parts.append(f"{topic} {year}")
-    for suffix in suffixes:
-        if years:
-            for year in years:
+    parts = [topic]
+    parts.extend(year_topic_variants(topic, years))
+    if primary_year and not contains_year(topic) and not any(contains_year(item) for item in parts):
+        parts.append(f"{topic} {primary_year}")
+    for word in angle_terms:
+        parts.append(f"{topic} {word}")
+    for suffix in fallback_terms:
+        parts.append(f"{topic} {suffix}")
+    for year in years[-2:]:
+        if year and year not in topic:
+            for suffix in fallback_terms[:3]:
                 parts.append(f"{topic} {suffix} {year}")
-        else:
-            parts.append(f"{topic} {suffix}")
-    for word in re.split(r"[,，\s]+", extra_keywords or ""):
-        word = word.strip()
-        if word:
-            if years:
-                for year in years:
-                    parts.append(f"{topic} {word} {year}")
-            else:
-                parts.append(f"{topic} {word}")
 
     queries: list[str] = []
     seen: set[str] = set()
@@ -369,6 +556,10 @@ def candidate_matches_exclusion(candidate: Candidate, exclude_keywords: str) -> 
     return [term for term in terms if term and term in blob]
 
 
+def count_term_hits(blob: str, terms: list[str], max_hits: int = 3) -> int:
+    return min(max_hits, sum(1 for term in terms if normalize_text(term) in blob))
+
+
 def relevance_tier(candidate: Candidate, topic: str) -> str:
     compact_blob = normalize_text(f"{candidate.title} {candidate.snippet}")
     compact_topic = normalize_text(topic)
@@ -406,8 +597,8 @@ def score_candidate(
     title_blob = f"{candidate.title} {candidate.snippet}"
     compact_blob = normalize_text(title_blob)
     compact_topic = normalize_text(topic)
-    source_blob = candidate.source
-    query_blob = candidate.search_query
+    source_blob = normalize_text(candidate.source)
+    query_blob = normalize_text(candidate.search_query)
     reasons: list[str] = []
     score = 0
     core_terms = core_topic_terms(topic)
@@ -418,29 +609,44 @@ def score_candidate(
     )
 
     if compact_topic and compact_topic in compact_blob:
-        score += 4
+        score += 5
         reasons.append("direct topic match")
     elif has_core_match:
-        score += 2
+        score += 3
         reasons.append("core topic match")
     if required_terms and has_required_intent:
-        score += 1
+        score += 2
         reasons.append("required intent match")
 
-    if any(term in candidate.title for term in VALUE_TERMS):
+    if any(term in candidate.title for term in ARTICLE_TYPE_TERMS):
         score += 3
+        reasons.append("preferred article type")
+    if any(term in candidate.title for term in VALUE_TERMS):
+        score += 2
         reasons.append("title value signal")
     if any(term in candidate.snippet for term in VALUE_TERMS):
         score += 2
-        reasons.append("snippet value signal")
-    if any(term in query_blob for term in VALUE_TERMS):
+        reasons.append("snippet analysis signal")
+    business_hits = count_term_hits(compact_blob, BUSINESS_ANALYSIS_TERMS, max_hits=3)
+    if business_hits:
+        score += business_hits
+        reasons.append("business analysis signal")
+    evidence_hits = count_term_hits(compact_blob, EVIDENCE_TERMS, max_hits=2)
+    if evidence_hits:
+        score += evidence_hits
+        reasons.append("evidence or data signal")
+    beverage_hits = count_term_hits(compact_blob + source_blob, BEVERAGE_COMPANY_TERMS, max_hits=2)
+    if beverage_hits:
+        score += beverage_hits
+        reasons.append("beverage/consumer goods context")
+    if any(normalize_text(term) in query_blob for term in VALUE_TERMS + BUSINESS_ANALYSIS_TERMS):
         score += 1
-        reasons.append("value query signal")
+        reasons.append("high-intent query signal")
     if len(normalize_text(candidate.snippet)) >= SUBSTANTIVE_SNIPPET_MIN_LENGTH:
         score += 1
         reasons.append("substantive snippet")
     source_terms = GENERAL_SOURCE_TERMS
-    if any(term in source_blob for term in source_terms):
+    if any(normalize_text(term) in source_blob for term in source_terms):
         score += 2
         reasons.append("relevant account")
     if any(term in title_blob for term in NOISE_TERMS):
@@ -458,9 +664,9 @@ def score_candidate(
         reasons.append("missing core topic")
 
     candidate.score = score
-    if score >= 8:
+    if score >= 10:
         candidate.rating = "strong"
-    elif score >= 4:
+    elif score >= 5:
         candidate.rating = "maybe"
     else:
         candidate.rating = "weak"
@@ -470,7 +676,48 @@ def score_candidate(
     candidate.reason = ", ".join(reasons) or "low signal"
 
 
-def fetch_sogou_results(session: requests.Session, query: str, timeout: int) -> str:
+def cache_path_for_query(cache_dir: Path, query: str) -> Path:
+    key = hashlib.sha256(query.encode("utf-8")).hexdigest()
+    return cache_dir / f"{key}.html"
+
+
+def read_cached_sogou_result(cache_dir: Path, query: str, ttl_hours: float) -> str | None:
+    if ttl_hours <= 0:
+        return None
+    cache_path = cache_path_for_query(cache_dir, query)
+    if not cache_path.exists():
+        return None
+    max_age = ttl_hours * 3600
+    age = time.time() - cache_path.stat().st_mtime
+    if age > max_age:
+        return None
+    try:
+        return cache_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+
+def write_cached_sogou_result(cache_dir: Path, query: str, page_text: str) -> None:
+    try:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_path_for_query(cache_dir, query).write_text(page_text, encoding="utf-8")
+    except OSError:
+        return
+
+
+def fetch_sogou_results(
+    session: requests.Session,
+    query: str,
+    timeout: int,
+    cache_dir: Path | None = None,
+    cache_ttl_hours: float = 0,
+) -> str:
+    if cache_dir is not None:
+        cached = read_cached_sogou_result(cache_dir, query, cache_ttl_hours)
+        if cached is not None:
+            print("  cache hit")
+            return cached
+
     response = session.get(
         make_search_url(query),
         headers={
@@ -484,7 +731,15 @@ def fetch_sogou_results(session: requests.Session, query: str, timeout: int) -> 
     response.raise_for_status()
     if not response.encoding or response.encoding.lower() == "iso-8859-1":
         response.encoding = response.apparent_encoding or "utf-8"
-    return response.text
+    page_text = response.text
+    marker = sogou_block_marker(page_text)
+    if marker:
+        raise SogouSearchBlockedError(
+            f"Sogou returned an anti-spider page ({marker}) instead of search results."
+        )
+    if cache_dir is not None:
+        write_cached_sogou_result(cache_dir, query, page_text)
+    return page_text
 
 
 def parse_sogou_results(page_html: str, query: str) -> list[Candidate]:
@@ -540,6 +795,61 @@ def parse_sogou_results(page_html: str, query: str) -> list[Candidate]:
     return candidates
 
 
+def browser_page_snapshot(cdp: "CdpClient", html_limit: int = 400000) -> dict[str, str]:
+    limit = int(max(10000, html_limit))
+    snapshot = cdp.evaluate(
+        f"""
+(() => ({{
+  url: location.href,
+  title: document.title,
+  html: document.documentElement ? document.documentElement.innerHTML.slice(0, {limit}) : ""
+}}))()
+""",
+        timeout=20,
+    )
+    return {
+        "url": (snapshot or {}).get("url", ""),
+        "title": (snapshot or {}).get("title", ""),
+        "html": (snapshot or {}).get("html", ""),
+    }
+
+
+def fetch_sogou_results_with_browser(
+    cdp: "CdpClient",
+    query: str,
+    verification_timeout: int,
+    min_delay: float,
+    max_delay: float,
+) -> str:
+    search_url = make_search_url(query)
+    cdp.call("Page.navigate", {"url": search_url}, timeout=20)
+    sleep_random(min_delay, max_delay)
+
+    deadline = time.time() + max(10, verification_timeout)
+    prompted = False
+    last_marker = ""
+    while time.time() < deadline:
+        snapshot = browser_page_snapshot(cdp)
+        page_html = snapshot.get("html", "")
+        marker = sogou_block_marker(page_html)
+        if not marker:
+            return page_html
+
+        last_marker = marker
+        if not prompted:
+            print(
+                "  Sogou verification is required in the opened browser. "
+                f"Complete it there; waiting up to {verification_timeout} seconds..."
+            )
+            prompted = True
+        time.sleep(2)
+
+    raise SogouSearchBlockedError(
+        "Sogou verification was not completed before timeout"
+        + (f" ({last_marker})" if last_marker else "")
+    )
+
+
 def collect_candidates(
     topic: str,
     extra_keywords: str,
@@ -551,30 +861,134 @@ def collect_candidates(
     max_delay: float,
     start_date: dt.date | None = None,
     end_date: dt.date | None = None,
+    browser_search: bool = True,
+    chrome_path: str | None = None,
+    verification_timeout: int = 180,
+    search_cache_dir: Path | None = DEFAULT_SEARCH_CACHE_DIR,
+    cache_ttl_hours: float = 12,
+    stop_on_block: bool = True,
+    target_screening_count: int = 0,
+    stop_after_empty_rounds: int = 2,
 ) -> tuple[list[Candidate], requests.cookies.RequestsCookieJar]:
     session = requests.Session()
     session.trust_env = False
     queries = generate_queries(topic, extra_keywords, max_queries, start_date, end_date)
     collected: list[Candidate] = []
+    blocked_count = 0
+    browser_proc: subprocess.Popen[Any] | None = None
+    browser_cdp: CdpClient | None = None
+    browser_profile_dir: Path | None = None
+    qualified_total = 0
+    empty_rounds = 0
 
-    for index, query in enumerate(queries, start=1):
-        print(f"Search {index}/{len(queries)}: {query}")
-        try:
-            page = fetch_sogou_results(session, query, timeout)
-            results = parse_sogou_results(page, query)[:top_per_query]
-        except Exception as exc:
-            print(f"  search failed: {type(exc).__name__}: {exc}")
-            results = []
-        for candidate in results:
-            score_candidate(
-                candidate,
-                topic,
-                extra_keywords=extra_keywords,
+    try:
+        for index, query in enumerate(queries, start=1):
+            print(f"Search {index}/{len(queries)}: {query}")
+            try:
+                page = fetch_sogou_results(
+                    session,
+                    query,
+                    timeout,
+                    cache_dir=search_cache_dir,
+                    cache_ttl_hours=cache_ttl_hours,
+                )
+                results = parse_sogou_results(page, query)[:top_per_query]
+            except SogouSearchBlockedError as exc:
+                blocked_count += 1
+                print(f"  search blocked: {exc}")
+                results = []
+                if browser_search:
+                    if browser_cdp is None:
+                        port = free_port()
+                        browser_profile_dir = browser_work_dir("chrome-sogou-search", port)
+                        try:
+                            browser_proc, browser_path, headless, log_path = launch_debug_browser(
+                                chrome_path,
+                                port,
+                                browser_profile_dir,
+                                visible=True,
+                                allow_headless=False,
+                            )
+                            print(
+                                "  Browser search using "
+                                f"{Path(browser_path).name} ({'headless' if headless else 'visible'}); "
+                                f"log: {log_path}"
+                            )
+                            browser_cdp = CdpClient(new_cdp_page(port))
+                            browser_cdp.call("Page.enable")
+                            browser_cdp.call("Runtime.enable")
+                        except Exception as browser_exc:
+                            print(f"  browser search unavailable: {type(browser_exc).__name__}: {browser_exc}")
+                            stop_process(browser_proc)
+                            browser_proc = None
+                            browser_profile_dir = None
+                    if browser_cdp is not None:
+                        try:
+                            page = fetch_sogou_results_with_browser(
+                                browser_cdp,
+                                query,
+                                verification_timeout=verification_timeout,
+                                min_delay=min_delay,
+                                max_delay=max_delay,
+                            )
+                            results = parse_sogou_results(page, query)[:top_per_query]
+                            print(f"  browser parsed {len(results)} results")
+                        except Exception as browser_exc:
+                            print(f"  browser search failed: {type(browser_exc).__name__}: {browser_exc}")
+                    if not results and stop_on_block:
+                        print("  stopping this search run to avoid repeated blocked requests")
+                        break
+                elif stop_on_block:
+                    print("  stopping this search run to avoid repeated blocked requests")
+                    break
+            except Exception as exc:
+                print(f"  search failed: {type(exc).__name__}: {exc}")
+                results = []
+            for candidate in results:
+                score_candidate(
+                    candidate,
+                    topic,
+                    extra_keywords=extra_keywords,
+                    exclude_keywords=exclude_keywords,
+                )
+            collected.extend(results)
+            current_candidates = dedupe_candidates(collected)
+            new_qualified_total = screenable_candidate_count(
+                current_candidates,
+                topic=topic,
                 exclude_keywords=exclude_keywords,
+                start_date=start_date,
+                end_date=end_date,
             )
-        collected.extend(results)
-        if index < len(queries):
-            sleep_random(min_delay, max_delay)
+            delta = new_qualified_total - qualified_total
+            if delta > 0:
+                print(f"  added {delta} screenable candidates; total screenable={new_qualified_total}")
+                empty_rounds = 0
+            else:
+                empty_rounds += 1
+                print(f"  no new screenable candidates; empty_rounds={empty_rounds}/{stop_after_empty_rounds}")
+            qualified_total = max(qualified_total, new_qualified_total)
+            if target_screening_count and qualified_total >= target_screening_count:
+                print(f"  target screening pool reached ({qualified_total}/{target_screening_count}); stopping search.")
+                break
+            if stop_after_empty_rounds > 0 and empty_rounds >= stop_after_empty_rounds:
+                print("  stopping search after consecutive low-yield keyword rounds.")
+                break
+            if index < len(queries):
+                sleep_random(min_delay, max_delay)
+
+        if not collected and blocked_count:
+            raise RuntimeError(
+                "Sogou blocked all usable search attempts with anti-spider pages; "
+                "no candidates could be collected. Complete verification in the opened browser "
+                "and rerun, try again later, or use manual URLs."
+            )
+    finally:
+        if browser_cdp:
+            browser_cdp.close()
+        stop_process(browser_proc)
+        if browser_profile_dir:
+            shutil.rmtree(browser_profile_dir, ignore_errors=True)
 
     return dedupe_candidates(collected), session.cookies
 
@@ -620,6 +1034,56 @@ def filter_candidates_by_date(
             continue
         filtered.append(candidate)
     return filtered
+
+
+def candidate_in_date_range(
+    candidate: Candidate,
+    start_date: dt.date | None,
+    end_date: dt.date | None,
+) -> bool:
+    if not start_date and not end_date:
+        return True
+    if not candidate.date:
+        return False
+    try:
+        candidate_date = dt.date.fromisoformat(candidate.date)
+    except ValueError:
+        return False
+    if start_date and candidate_date < start_date:
+        return False
+    if end_date and candidate_date > end_date:
+        return False
+    return True
+
+
+def candidate_is_screenable(
+    candidate: Candidate,
+    topic: str,
+    exclude_keywords: str,
+    start_date: dt.date | None,
+    end_date: dt.date | None,
+) -> bool:
+    return (
+        candidate_in_date_range(candidate, start_date, end_date)
+        and RATING_LEVELS.get(candidate.rating, 0) >= RATING_LEVELS["maybe"]
+        and candidate_matches_core_topic(candidate, topic)
+        and RELEVANCE_TIER_PRIORITY.get(candidate.relevance_tier, 0) >= RELEVANCE_TIER_PRIORITY["core_related"]
+        and not candidate_matches_exclusion(candidate, exclude_keywords)
+    )
+
+
+def screenable_candidate_count(
+    candidates: list[Candidate],
+    topic: str,
+    exclude_keywords: str,
+    start_date: dt.date | None,
+    end_date: dt.date | None,
+) -> int:
+    return sum(
+        1
+        for candidate in candidates
+        if candidate_is_screenable(candidate, topic, exclude_keywords, start_date, end_date)
+    )
 
 
 def rank_for_screening(candidates: list[Candidate]) -> list[Candidate]:
@@ -680,18 +1144,18 @@ def sleep_random(min_delay: float, max_delay: float) -> None:
 
 
 def find_chrome_candidates() -> list[str]:
+    explicit_browser = os.environ.get("CHROME_PATH", "")
     candidates = [
-        os.environ.get("CHROME_PATH", ""),
+        explicit_browser,
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
         r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
     ]
     found_items: list[str] = []
     for item in candidates:
         if item and Path(item).exists():
             found_items.append(item)
-    for name in ["chrome", "msedge", "google-chrome", "chromium", "chromium-browser"]:
+    command_names = ["chrome", "google-chrome", "chromium", "chromium-browser"]
+    for name in command_names:
         found = shutil.which(name)
         if found and found not in found_items:
             found_items.append(found)
@@ -709,12 +1173,17 @@ def free_port() -> int:
         return int(sock.getsockname()[1])
 
 
+def browser_work_dir(prefix: str, port: int) -> Path:
+    return Path(tempfile.gettempdir()) / "wechat-article-screening" / f"{prefix}-{port}"
+
+
 def launch_chrome(
     chrome_path: str,
     port: int,
     profile_dir: Path,
     log_path: Path,
     headless: bool = False,
+    visible: bool = False,
 ) -> subprocess.Popen[Any]:
     profile_dir = profile_dir.resolve()
     profile_dir.mkdir(parents=True, exist_ok=True)
@@ -724,23 +1193,37 @@ def launch_chrome(
         f"--remote-debugging-port={port}",
         "--remote-allow-origins=*",
         f"--user-data-dir={profile_dir}",
-        "--window-position=-32000,-32000",
         "--window-size=900,700",
         "--disable-gpu",
         "--disable-extensions",
+        "--disable-component-extensions-with-background-pages",
         "--disable-dev-shm-usage",
+        "--disable-crash-reporter",
+        "--disable-crashpad",
+        "--disable-breakpad",
+        "--disable-logging",
+        "--no-sandbox",
         "--no-first-run",
         "--no-default-browser-check",
+        "--disable-background-mode",
         "--disable-background-networking",
+        "--disable-component-update",
+        "--disable-client-side-phishing-detection",
+        "--disable-features=CalculateNativeWinOcclusion,RendererCodeIntegrity,NetworkServiceSandbox",
+        "--disable-search-engine-choice-screen",
+        "--disable-notifications",
+        "--password-store=basic",
         "--disable-sync",
         "--disable-blink-features=AutomationControlled",
         "about:blank",
     ]
+    if not visible:
+        args.insert(8, "--window-position=-32000,-32000")
     if headless:
         args.insert(1, "--headless=new")
-    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    creationflags = 0 if visible else getattr(subprocess, "CREATE_NO_WINDOW", 0)
     startupinfo = None
-    if os.name == "nt":
+    if os.name == "nt" and not visible:
         startupinfo = subprocess.STARTUPINFO()
         startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         startupinfo.wShowWindow = 0
@@ -773,6 +1256,16 @@ def wait_for_chrome(port: int, timeout: float = 25.0) -> None:
     raise RuntimeError(f"Chrome debugging port did not open: {last_error}")
 
 
+def verify_chrome_target(port: int) -> None:
+    data = open_json(
+        f"http://127.0.0.1:{port}/json/new?{urllib.parse.quote('about:blank', safe='')}",
+        timeout=3.0,
+        method="PUT",
+    )
+    if not data.get("webSocketDebuggerUrl"):
+        raise RuntimeError("Chrome debugging target was not created")
+
+
 def stop_process(proc: subprocess.Popen[Any] | None) -> None:
     if proc is None:
         return
@@ -789,21 +1282,32 @@ def launch_debug_browser(
     chrome_path: str | None,
     port: int,
     profile_dir: Path,
+    visible: bool = False,
+    allow_headless: bool = True,
 ) -> tuple[subprocess.Popen[Any], str, bool, str]:
     candidates = [chrome_path] if chrome_path else find_chrome_candidates()
     candidates = [item for item in candidates if item]
     if not candidates:
-        raise RuntimeError("Chrome or Edge was not found.")
+        raise RuntimeError("Chrome was not found. Install Chrome or set CHROME_PATH.")
 
     attempts: list[str] = []
+    headless_options = (False, True) if allow_headless else (False,)
     for browser_path in candidates:
-        for headless in (False, True):
+        for headless in headless_options:
             profile = profile_dir / (safe_name(Path(browser_path).stem) + ("-headless" if headless else ""))
             log_path = profile / "browser.log"
             proc: subprocess.Popen[Any] | None = None
             try:
-                proc = launch_chrome(browser_path, port, profile, log_path=log_path, headless=headless)
+                proc = launch_chrome(
+                    browser_path,
+                    port,
+                    profile,
+                    log_path=log_path,
+                    headless=headless,
+                    visible=visible,
+                )
                 wait_for_chrome(port)
+                verify_chrome_target(port)
                 return proc, browser_path, headless, str(log_path)
             except Exception as exc:
                 exit_code = proc.poll() if proc else None
@@ -967,21 +1471,34 @@ def resolve_candidates_with_browser(
     max_delay: float,
     chrome_path: str | None,
     cookies: requests.cookies.RequestsCookieJar | None = None,
+    target_verified_count: int = 0,
 ) -> None:
     if not candidates:
         return
 
+    for candidate in candidates[:count]:
+        if "mp.weixin.qq.com" in candidate.sogou_url:
+            candidate.resolved_url = candidate.sogou_url
+            candidate.resolve_status = "direct"
+
     port = free_port()
-    profile_dir = Path("work") / f"chrome-research-{port}"
+    profile_dir = browser_work_dir("chrome-research", port)
     proc: subprocess.Popen[Any] | None = None
     cdp: CdpClient | None = None
     try:
         try:
-            proc, browser_path, headless, log_path = launch_debug_browser(chrome_path, port, profile_dir)
+            proc, browser_path, headless, log_path = launch_debug_browser(
+                chrome_path,
+                port,
+                profile_dir,
+                visible=True,
+                allow_headless=False,
+            )
             print(
                 "Browser verification using "
-                f"{Path(browser_path).name} ({'headless' if headless else 'normal'}); log: {log_path}"
+                f"{Path(browser_path).name} ({'headless' if headless else 'visible'}); log: {log_path}"
             )
+            print("Complete any Sogou verification in the opened browser window if it appears.")
         except Exception as exc:
             detail = f"{type(exc).__name__}: {exc}"
             for candidate in candidates[:count]:
@@ -989,13 +1506,36 @@ def resolve_candidates_with_browser(
             print(f"Browser verification failed: {detail}")
             print("If an AI tool asks for permission to open a local browser, allow it and rerun this step.")
             return
-        cdp = CdpClient(new_cdp_page(port))
-        cdp.call("Network.enable")
-        install_sogou_cookies(cdp, cookies)
-        cdp.call("Page.enable")
-        cdp.call("Runtime.enable")
+        try:
+            cdp = CdpClient(new_cdp_page(port))
+            cdp.call("Network.enable")
+            install_sogou_cookies(cdp, cookies)
+            cdp.call("Page.enable")
+            cdp.call("Runtime.enable")
+        except Exception as exc:
+            detail = f"{type(exc).__name__}: {exc}"
+            for candidate in candidates[:count]:
+                if not candidate.resolve_status or candidate.resolve_status == "pending":
+                    candidate.resolve_status = f"browser_unavailable: {detail}"
+            print(f"Browser verification unavailable after launch: {detail}")
+            print("Continuing with collected search candidates instead of failing the whole run.")
+            return
 
         for index, candidate in enumerate(candidates[:count], start=1):
+            if target_verified_count > 0:
+                verified_count = sum(
+                    1
+                    for item in candidates[:count]
+                    if "mp.weixin.qq.com" in item.resolved_url
+                )
+                if verified_count >= target_verified_count:
+                    print(
+                        "Verified target reached "
+                        f"({verified_count}/{target_verified_count}); stopping browser verification early."
+                    )
+                    break
+            if candidate.resolved_url:
+                continue
             print(f"Verify {index}/{min(count, len(candidates))}: {candidate.title[:50]}")
             try:
                 resolve_one_candidate(cdp, candidate, min_delay, max_delay)
@@ -1004,7 +1544,10 @@ def resolve_candidates_with_browser(
             sleep_random(min_delay, max_delay)
     finally:
         if cdp:
-            cdp.close()
+            try:
+                cdp.close()
+            except Exception:
+                pass
         stop_process(proc)
         shutil.rmtree(profile_dir, ignore_errors=True)
 
@@ -1018,6 +1561,10 @@ def resolve_one_candidate(cdp: CdpClient, candidate: Candidate, min_delay: float
     direct_status, direct_url = navigate_and_extract_wechat(cdp, candidate.sogou_url, min_delay, max_delay)
     if direct_url:
         candidate.resolved_url = direct_url
+        candidate.resolve_status = direct_status
+        return
+
+    if not candidate.search_url:
         candidate.resolve_status = direct_status
         return
 
@@ -1055,13 +1602,17 @@ def resolve_one_candidate(cdp: CdpClient, candidate: Candidate, min_delay: float
     candidate.resolve_status = fallback_status
 
 
+def browser_safe_url(url: str) -> str:
+    return urllib.parse.quote((url or "").strip(), safe=":/?&=%#._~+-")
+
+
 def navigate_and_extract_wechat(
     cdp: CdpClient,
     url: str,
     min_delay: float,
     max_delay: float,
 ) -> tuple[str, str]:
-    cdp.call("Page.navigate", {"url": url}, timeout=20)
+    cdp.call("Page.navigate", {"url": browser_safe_url(url)}, timeout=20)
     sleep_random(min_delay, max_delay)
     final = cdp.evaluate(
         """
@@ -1076,6 +1627,9 @@ def navigate_and_extract_wechat(
     final_url = (final or {}).get("url", "")
     final_html = (final or {}).get("html", "")
     if "mp.weixin.qq.com" in final_url:
+        marker = unavailable_wechat_marker(final_html)
+        if marker:
+            return f"wechat_unavailable: {marker}", ""
         return "resolved", final_url
 
     match = re.search(r"https://mp\.weixin\.qq\.com/s/[A-Za-z0-9_-]+", final_html)
@@ -1172,6 +1726,40 @@ def write_outputs(
     return csv_path, md_path, pool_csv_path
 
 
+def load_candidates_from_csv(csv_path: Path) -> list[Candidate]:
+    candidates: list[Candidate] = []
+    with csv_path.open("r", newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            resolved_url = (row.get("resolved_url") or "").strip()
+            resolve_status = (row.get("resolve_status") or "pending").strip()
+            if "mp.weixin.qq.com" not in resolved_url:
+                resolved_url = ""
+                resolve_status = "pending"
+            try:
+                score = int(row.get("score") or 0)
+            except ValueError:
+                score = 0
+            candidates.append(
+                Candidate(
+                    title=(row.get("title") or "").strip(),
+                    snippet=(row.get("snippet") or "").strip(),
+                    source=(row.get("source") or "").strip(),
+                    date=(row.get("date") or "").strip(),
+                    search_query=(row.get("search_query") or "").strip(),
+                    search_url=(row.get("search_url") or "").strip(),
+                    sogou_url=(row.get("sogou_url") or "").strip(),
+                    score=score,
+                    rating=(row.get("rating") or "weak").strip(),
+                    reason=(row.get("reason") or "").strip(),
+                    relevance_tier=(row.get("relevance_tier") or "weak").strip(),
+                    resolved_url=resolved_url,
+                    resolve_status=resolve_status,
+                )
+            )
+    return [candidate for candidate in candidates if candidate.title and candidate.sogou_url]
+
+
 def markdown_cell(value: str) -> str:
     return (value or "").replace("|", "\\|").replace("\n", " ").strip()
 
@@ -1217,6 +1805,12 @@ def load_params_file(args: argparse.Namespace) -> argparse.Namespace:
         "urls_file": "urls_file",
         "no_browser": "no_browser",
         "chrome_path": "chrome_path",
+        "sogou_verify_timeout": "sogou_verify_timeout",
+        "search_cache_dir": "search_cache_dir",
+        "cache_ttl_hours": "cache_ttl_hours",
+        "continue_after_block": "continue_after_block",
+        "stop_on_block": "stop_on_block",
+        "stop_after_empty_rounds": "stop_after_empty_rounds",
         "min_delay": "min_delay",
         "max_delay": "max_delay",
         "timeout": "timeout",
@@ -1225,6 +1819,8 @@ def load_params_file(args: argparse.Namespace) -> argparse.Namespace:
         if key in data and data[key] not in (None, ""):
             value = data[key]
             if attribute in {"urls_file"}:
+                value = Path(value)
+            if attribute in {"search_cache_dir"}:
                 value = Path(value)
             setattr(args, attribute, value)
     return args
@@ -1245,10 +1841,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--max-queries", type=int, default=0, help="How many search phrases to try. Default depends on --mode")
     parser.add_argument("--top-per-query", type=int, default=0, help="How many results to read from each search. Default depends on --mode")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--candidate-csv", type=Path, default=None, help="Reuse an existing candidate CSV and only rerun filtering/browser verification")
     parser.add_argument("--write-urls", action="store_true", help="Overwrite urls.txt with verified WeChat URLs")
     parser.add_argument("--urls-file", type=Path, default=DEFAULT_URLS_FILE)
-    parser.add_argument("--no-browser", action="store_true", help="Skip hidden browser verification")
-    parser.add_argument("--chrome-path", default=None, help="Optional Chrome or Edge executable path")
+    parser.add_argument("--no-browser", action="store_true", help="Skip browser-based Sogou search verification and redirect verification")
+    parser.add_argument("--chrome-path", default=None, help="Optional Chrome executable path")
+    parser.add_argument("--sogou-verify-timeout", type=int, default=180, help="Seconds to wait for manual Sogou verification in the opened browser")
+    parser.add_argument("--search-cache-dir", type=Path, default=DEFAULT_SEARCH_CACHE_DIR, help="Directory for cached Sogou search result pages")
+    parser.add_argument("--cache-ttl-hours", type=float, default=12, help="How long to reuse cached Sogou search pages. Set 0 to disable")
+    parser.add_argument("--continue-after-block", action="store_true", help="Keep trying remaining queries after Sogou blocks a request")
+    parser.add_argument("--stop-after-empty-rounds", type=int, default=2, help="Stop after this many keyword rounds add no screenable candidates")
     parser.add_argument("--min-delay", type=float, default=1.0, help="Minimum random delay in seconds")
     parser.add_argument("--max-delay", type=float, default=3.0, help="Maximum random delay in seconds")
     parser.add_argument("--timeout", type=int, default=15, help="Search request timeout in seconds")
@@ -1256,6 +1858,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         args = load_params_file(parser.parse_args(argv))
     except ValueError as exc:
         parser.error(str(exc))
+    if hasattr(args, "stop_on_block"):
+        args.continue_after_block = not bool(getattr(args, "stop_on_block"))
     if not args.topic:
         parser.error("--topic is required unless it is provided by --params-file")
     return args
@@ -1268,11 +1872,11 @@ def main(argv: list[str]) -> int:
         return 2
     if args.max_delay < args.min_delay:
         args.max_delay = args.min_delay
-    default_max_queries = 8 if args.mode == "fast" else 16
-    default_top_per_query = 10 if args.mode == "fast" else 15
+    default_max_queries = 5 if args.mode == "fast" else 12
+    default_top_per_query = 8 if args.mode == "fast" else 10
     max_queries = args.max_queries if args.max_queries > 0 else default_max_queries
     top_per_query = args.top_per_query if args.top_per_query > 0 else default_top_per_query
-    pool_multiplier = 2 if args.mode == "fast" else 3
+    pool_multiplier = 2
     pool_size = args.pool_size if args.pool_size > 0 else args.count * pool_multiplier
     try:
         start_date = parse_date_arg(args.start_date, "--start-date")
@@ -1298,20 +1902,41 @@ def main(argv: list[str]) -> int:
         )
     if args.exclude_keywords:
         print(f"Local memory exclusions: {args.exclude_keywords}")
-    print("Collecting candidates...")
-    candidates, sogou_cookies = collect_candidates(
-        topic=args.topic,
-        extra_keywords=args.extra_keywords,
-        exclude_keywords=args.exclude_keywords,
-        max_queries=max_queries,
-        top_per_query=top_per_query,
-        timeout=args.timeout,
-        min_delay=args.min_delay,
-        max_delay=args.max_delay,
-        start_date=start_date,
-        end_date=end_date,
-    )
-    print(f"Collected {len(candidates)} unique candidates.")
+    if args.candidate_csv:
+        if not args.candidate_csv.exists():
+            print(f"Candidate CSV was not found: {args.candidate_csv}")
+            return 2
+        print(f"Loading existing candidates: {args.candidate_csv}")
+        candidates = load_candidates_from_csv(args.candidate_csv)
+        sogou_cookies = requests.cookies.RequestsCookieJar()
+        print(f"Loaded {len(candidates)} candidates from CSV.")
+    else:
+        print("Collecting candidates...")
+        try:
+            candidates, sogou_cookies = collect_candidates(
+                topic=args.topic,
+                extra_keywords=args.extra_keywords,
+                exclude_keywords=args.exclude_keywords,
+                max_queries=max_queries,
+                top_per_query=top_per_query,
+                timeout=args.timeout,
+                min_delay=args.min_delay,
+                max_delay=args.max_delay,
+                start_date=start_date,
+                end_date=end_date,
+                browser_search=not args.no_browser,
+                chrome_path=args.chrome_path,
+                verification_timeout=args.sogou_verify_timeout,
+                search_cache_dir=args.search_cache_dir,
+            cache_ttl_hours=args.cache_ttl_hours,
+            stop_on_block=not args.continue_after_block,
+            target_screening_count=pool_size,
+            stop_after_empty_rounds=args.stop_after_empty_rounds,
+        )
+        except RuntimeError as exc:
+            print(f"Search collection failed: {exc}")
+            return 1
+        print(f"Collected {len(candidates)} unique candidates.")
 
     before_date_filter = len(candidates)
     candidates = filter_candidates_by_date(candidates, start_date, end_date)
@@ -1352,6 +1977,7 @@ def main(argv: list[str]) -> int:
             max_delay=args.max_delay,
             chrome_path=args.chrome_path,
             cookies=sogou_cookies,
+            target_verified_count=args.count,
         )
         screening_pool = dedupe_candidates(screening_pool)
 

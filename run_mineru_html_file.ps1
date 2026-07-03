@@ -6,6 +6,13 @@ param(
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
+try {
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    $OutputEncoding = [System.Text.Encoding]::UTF8
+    $env:PYTHONIOENCODING = "utf-8"
+} catch {
+}
+
 $pythonCandidates = @(
     "$env:LOCALAPPDATA\Python\bin\python.exe",
     "$env:LOCALAPPDATA\Python\pythoncore-3.14-64\python.exe",
