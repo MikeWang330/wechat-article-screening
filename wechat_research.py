@@ -246,6 +246,36 @@ def strip_tags(value: str) -> str:
     return re.sub(r"\s+", " ", html.unescape(value)).strip()
 
 
+UNAVAILABLE_WECHAT_MARKERS = [
+    "该内容已被发布者删除",
+    "此内容已被发布者删除",
+    "该内容已被删除",
+    "此内容已被删除",
+    "此内容因违规无法查看",
+    "该内容因违规无法查看",
+    "此内容已被投诉并经审核",
+    "该公众号已被封禁",
+    "此账号已被封",
+    "该公众号已迁移",
+    "原账号迁移时未将文章素材同步至新账号",
+    "该链接已不可访问",
+    "链接已过期",
+    "文章不存在",
+    "内容不存在",
+    "参数错误",
+    "该内容无法查看",
+    "此内容无法查看",
+]
+
+
+def unavailable_wechat_marker(value: str) -> str:
+    compact = normalize_text(strip_tags(value))
+    for marker in UNAVAILABLE_WECHAT_MARKERS:
+        if normalize_text(marker) in compact:
+            return marker
+    return ""
+
+
 def safe_name(value: str, fallback: str = "research") -> str:
     value = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", value).strip(" ._")
     value = re.sub(r"\s+", "_", value)
@@ -1076,6 +1106,9 @@ def navigate_and_extract_wechat(
     final_url = (final or {}).get("url", "")
     final_html = (final or {}).get("html", "")
     if "mp.weixin.qq.com" in final_url:
+        marker = unavailable_wechat_marker(final_html)
+        if marker:
+            return f"wechat_unavailable: {marker}", ""
         return "resolved", final_url
 
     match = re.search(r"https://mp\.weixin\.qq\.com/s/[A-Za-z0-9_-]+", final_html)
