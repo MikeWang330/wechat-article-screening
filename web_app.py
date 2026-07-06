@@ -668,6 +668,31 @@ HTML = r"""<!doctype html>
       font-weight: 780;
       margin-bottom: 4px;
     }
+    .progress-heading {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 4px;
+    }
+    .progress-heading .progress-title {
+      margin-bottom: 0;
+    }
+    .runtime-chip {
+      display: none;
+      align-items: center;
+      min-height: 24px;
+      padding: 0 9px;
+      border-radius: 999px;
+      background: rgba(13, 117, 104, 0.09);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 760;
+      white-space: nowrap;
+    }
+    .runtime-chip.visible {
+      display: inline-flex;
+    }
     .progress-note {
       color: var(--muted);
       line-height: 1.55;
@@ -1084,7 +1109,10 @@ HTML = r"""<!doctype html>
               <div class="activity">
                 <div class="spinner" id="progressSpinner"></div>
                 <div>
-                  <div class="progress-title" id="progressTitle">等待任务</div>
+                  <div class="progress-heading">
+                    <div class="progress-title" id="progressTitle">等待任务</div>
+                    <div class="runtime-chip" id="runtimeChip"></div>
+                  </div>
                   <div class="progress-note" id="progressNote">填写左侧表单后开始，本页会显示任务进度。</div>
                 </div>
               </div>
@@ -1450,6 +1478,17 @@ HTML = r"""<!doctype html>
       return {step, title, note};
     }
 
+    function formatRuntime(seconds) {
+      const total = Math.max(0, Math.floor(Number(seconds) || 0));
+      if (!total) return "";
+      const hours = Math.floor(total / 3600);
+      const minutes = Math.floor((total % 3600) / 60);
+      const secs = total % 60;
+      if (hours > 0) return `运行 ${hours} 小时 ${String(minutes).padStart(2, "0")} 分`;
+      if (minutes > 0) return `运行 ${minutes} 分 ${String(secs).padStart(2, "0")} 秒`;
+      return `运行 ${secs} 秒`;
+    }
+
     function renderProgress(job) {
       const progress = progressFromJob(job);
       const activeIndex = progressSteps.indexOf(progress.step);
@@ -1467,6 +1506,10 @@ HTML = r"""<!doctype html>
       el("progressBar").style.width = `${Math.min(100, percent)}%`;
       el("progressTitle").textContent = progress.title;
       el("progressNote").textContent = progress.note;
+      const runtimeChip = el("runtimeChip");
+      const runtimeText = formatRuntime(job.elapsed_seconds);
+      runtimeChip.textContent = runtimeText;
+      runtimeChip.classList.toggle("visible", Boolean(runtimeText) && job.status !== "idle");
       el("resultNote").textContent = job.status === "queued"
         ? "任务已提交，请保持这个本地页面打开。"
         : progress.note;
@@ -1794,6 +1837,9 @@ class Job:
     topic: str
     status: str = "queued"
     started_at: str = ""
+    finished_at: str = ""
+    started_monotonic: float = field(default=0.0, repr=False, compare=False)
+    finished_monotonic: float = field(default=0.0, repr=False, compare=False)
     summary: str = "等待开始。"
     logs: list[str] = field(default_factory=list)
     results: list[dict[str, str]] = field(default_factory=list)
@@ -1811,12 +1857,29 @@ class Job:
         if len(self.logs) > 1200:
             self.logs = self.logs[-1200:]
 
+    def elapsed_seconds(self) -> int:
+        if not self.started_monotonic:
+            return 0
+        end = self.finished_monotonic or time.monotonic()
+        return max(0, int(end - self.started_monotonic))
+
+    def ensure_finished_time(self) -> None:
+        if self.status not in {"done", "failed", "canceled"}:
+            return
+        if not self.finished_at:
+            self.finished_at = time.strftime("%Y-%m-%d %H:%M:%S")
+        if self.started_monotonic and not self.finished_monotonic:
+            self.finished_monotonic = time.monotonic()
+
     def as_dict(self) -> dict[str, Any]:
+        self.ensure_finished_time()
         return {
             "id": self.id,
             "topic": self.topic,
             "status": self.status,
             "started_at": self.started_at,
+            "finished_at": self.finished_at,
+            "elapsed_seconds": self.elapsed_seconds(),
             "summary": self.summary,
             "logs": self.logs,
             "results": self.results,
@@ -2510,6 +2573,9 @@ def default_browser_path() -> str:
 def run_job_inner(job: Job, payload: dict[str, Any]) -> None:
     job.status = "running"
     job.started_at = time.strftime("%Y-%m-%d %H:%M:%S")
+    job.finished_at = ""
+    job.started_monotonic = time.monotonic()
+    job.finished_monotonic = 0.0
     job.summary = "任务运行中。"
     try:
         profile = intensity_profile(payload)
