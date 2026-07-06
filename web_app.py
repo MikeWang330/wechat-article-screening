@@ -361,12 +361,13 @@ HTML = r"""<!doctype html>
     }
     .intensity-control {
       display: grid;
-      gap: 14px;
+      gap: 12px;
       margin-top: 8px;
-      padding: 14px 14px 12px;
-      border: 1px solid var(--line-strong);
+      padding: 15px 16px 14px;
+      border: 1px solid rgba(169, 190, 184, 0.56);
       border-radius: 8px;
-      background: #fff;
+      background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(247,250,248,0.94));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.75), 0 10px 24px rgba(28, 45, 41, 0.06);
     }
     .intensity-readout {
       display: flex;
@@ -376,21 +377,26 @@ HTML = r"""<!doctype html>
     }
     .intensity-current {
       color: var(--text);
-      font-size: 18px;
+      font-size: 17px;
       font-weight: 800;
       line-height: 1.2;
+      letter-spacing: 0;
     }
     .intensity-limit {
       display: inline-flex;
       align-items: center;
-      min-height: 26px;
-      padding: 0 9px;
+      min-height: 25px;
+      padding: 0 10px;
       border-radius: 999px;
-      background: #edf7f4;
-      color: var(--accent-dark);
+      background: rgba(13,117,104,0.08);
+      color: #0c6f63;
       font-size: 12px;
       font-weight: 750;
       white-space: nowrap;
+    }
+    .intensity-slider-shell {
+      position: relative;
+      padding: 3px 0 1px;
     }
     .intensity-range {
       width: 100%;
@@ -400,66 +406,76 @@ HTML = r"""<!doctype html>
       background: transparent;
       accent-color: var(--accent);
       cursor: pointer;
+      -webkit-appearance: none;
+      appearance: none;
     }
     .intensity-range:focus {
       box-shadow: none;
     }
     .intensity-range::-webkit-slider-runnable-track {
-      height: 8px;
+      height: 6px;
       border-radius: 999px;
       background: linear-gradient(
         90deg,
-        var(--accent) 0%,
-        var(--accent) var(--intensity-position, 60%),
-        #dfe8e6 var(--intensity-position, 60%),
-        #dfe8e6 100%
+        #0e7a6c 0%,
+        #0e7a6c var(--intensity-position, 60%),
+        #e2e9e6 var(--intensity-position, 60%),
+        #e2e9e6 100%
       );
     }
     .intensity-range::-webkit-slider-thumb {
+      -webkit-appearance: none;
       appearance: none;
-      width: 22px;
-      height: 22px;
-      margin-top: -7px;
-      border: 3px solid #fff;
+      width: 21px;
+      height: 21px;
+      margin-top: -7.5px;
+      border: 1px solid rgba(40, 64, 59, 0.12);
       border-radius: 50%;
-      background: var(--accent);
-      box-shadow: 0 2px 8px rgba(17, 34, 31, 0.25);
+      background: #fff;
+      box-shadow: 0 2px 6px rgba(17, 34, 31, 0.18), 0 5px 14px rgba(17, 34, 31, 0.12);
     }
     .intensity-range::-moz-range-track {
-      height: 8px;
+      height: 6px;
       border-radius: 999px;
-      background: #dfe8e6;
+      background: #e2e9e6;
     }
     .intensity-range::-moz-range-progress {
-      height: 8px;
+      height: 6px;
       border-radius: 999px;
-      background: var(--accent);
+      background: #0e7a6c;
     }
     .intensity-range::-moz-range-thumb {
-      width: 18px;
-      height: 18px;
-      border: 3px solid #fff;
+      width: 19px;
+      height: 19px;
+      border: 1px solid rgba(40, 64, 59, 0.12);
       border-radius: 50%;
-      background: var(--accent);
-      box-shadow: 0 2px 8px rgba(17, 34, 31, 0.25);
+      background: #fff;
+      box-shadow: 0 2px 6px rgba(17, 34, 31, 0.18), 0 5px 14px rgba(17, 34, 31, 0.12);
     }
     .intensity-scale {
-      display: grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
-      gap: 4px;
+      position: relative;
+      height: 18px;
+      margin-top: -2px;
       color: var(--muted);
       font-size: 11px;
       line-height: 1.2;
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum";
+    }
+    .intensity-scale span {
+      position: absolute;
+      top: 0;
+      left: var(--tick-left);
+      width: 34px;
+      margin-left: -17px;
       text-align: center;
     }
-    .intensity-scale span:first-child { text-align: left; }
-    .intensity-scale span:last-child { text-align: right; }
     .intensity-scale .active {
-      color: var(--accent-dark);
+      color: #0b6f63;
       font-weight: 800;
     }
     .intensity-desc {
-      color: var(--muted);
+      color: #687771;
       font-size: 12px;
       line-height: 1.6;
     }
@@ -1034,14 +1050,16 @@ HTML = r"""<!doctype html>
                   <div class="intensity-current" id="intensityTitle">0.6 推荐</div>
                   <div class="intensity-limit" id="intensityCap">最多 20 篇</div>
                 </div>
-                <input class="intensity-range" id="intensityRange" type="range" min="0" max="5" step="1" value="3" aria-label="筛选强度">
+                <div class="intensity-slider-shell">
+                  <input class="intensity-range" id="intensityRange" type="range" min="0" max="5" step="1" value="3" aria-label="筛选强度">
+                </div>
                 <div class="intensity-scale" id="intensityScale">
-                  <span>0</span>
-                  <span>0.2</span>
-                  <span>0.4</span>
-                  <span>0.6</span>
-                  <span>0.8</span>
-                  <span>1.0</span>
+                  <span style="--tick-left: 0%;">0</span>
+                  <span style="--tick-left: 20%;">0.2</span>
+                  <span style="--tick-left: 40%;">0.4</span>
+                  <span style="--tick-left: 60%;">0.6</span>
+                  <span style="--tick-left: 80%;">0.8</span>
+                  <span style="--tick-left: 100%;">1.0</span>
                 </div>
                 <div class="intensity-desc" id="intensityDesc">质量和覆盖平衡，不会为了凑数加入弱相关内容。</div>
               </div>
