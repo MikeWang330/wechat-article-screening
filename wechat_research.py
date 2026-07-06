@@ -527,11 +527,35 @@ def core_topic_terms(topic: str) -> list[str]:
     return clean_terms
 
 
+def required_core_topic_terms(topic: str) -> list[str]:
+    terms: list[str] = []
+    for raw_term in re.split(r"[\s,，、/|]+", topic or ""):
+        compact_term = normalize_text(raw_term.strip())
+        if len(compact_term) < 2 or compact_term.isdigit():
+            continue
+        for intent_term in sorted(TOPIC_INTENT_TERMS, key=len, reverse=True):
+            compact_term = compact_term.replace(normalize_text(intent_term), "")
+        if len(compact_term) >= 2 and not compact_term.isdigit():
+            terms.append(compact_term)
+
+    seen: set[str] = set()
+    clean_terms: list[str] = []
+    for term in terms:
+        if term and term not in seen:
+            clean_terms.append(term)
+            seen.add(term)
+    return clean_terms
+
+
 def candidate_matches_core_topic(candidate: Candidate, topic: str) -> bool:
     core_terms = core_topic_terms(topic)
     if not core_terms:
         return True
     blob = normalize_text(f"{candidate.title} {candidate.snippet}")
+    required_terms = required_core_topic_terms(topic)
+    if len(required_terms) >= 2:
+        compact_topic = normalize_text(topic)
+        return (compact_topic and compact_topic in blob) or all(term in blob for term in required_terms)
     return any(term in blob for term in core_terms)
 
 
@@ -602,7 +626,7 @@ def score_candidate(
     reasons: list[str] = []
     score = 0
     core_terms = core_topic_terms(topic)
-    has_core_match = any(term in compact_blob for term in core_terms)
+    has_core_match = candidate_matches_core_topic(candidate, topic)
     required_terms = required_intent_terms(topic)
     has_required_intent = not required_terms or any(
         normalize_text(term) in compact_blob for term in required_terms
@@ -2004,12 +2028,11 @@ def main(argv: list[str]) -> int:
     if core_terms:
         before_core_filter = len(candidates)
         core_candidates = [candidate for candidate in candidates if candidate_matches_core_topic(candidate, args.topic)]
-        if core_candidates:
-            candidates = core_candidates
-            print(
-                "Core topic filter "
-                f"({', '.join(core_terms)}) kept {len(candidates)} of {before_core_filter} candidates."
-            )
+        candidates = core_candidates
+        print(
+            "Core topic filter "
+            f"({', '.join(core_terms)}) kept {len(candidates)} of {before_core_filter} candidates."
+        )
 
     intent_terms = required_intent_terms(args.topic)
     if intent_terms:
