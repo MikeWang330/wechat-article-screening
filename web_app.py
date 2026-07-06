@@ -1891,6 +1891,8 @@ def expand_topic_with_llm(payload: dict[str, Any], job: Job) -> dict[str, str]:
     base_url = str(payload.get("llm_base_url", "")).strip().rstrip("/")
     model = str(payload.get("llm_model", "")).strip()
     api_key = str(payload.get("llm_api_key", "")).strip()
+    if job.cancel_requested:
+        return {"topic": topic, "extra_keywords": "", "exclude_keywords": ""}
     if not payload.get("use_llm"):
         return {"topic": topic, "extra_keywords": "", "exclude_keywords": ""}
     if not base_url or not model or not api_key:
@@ -1939,7 +1941,7 @@ def expand_topic_with_llm(payload: dict[str, Any], job: Job) -> dict[str, str]:
     )
     try:
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-        with opener.open(request, timeout=45) as response:
+        with opener.open(request, timeout=10) as response:
             data = json.loads(response.read().decode("utf-8"))
         content = data["choices"][0]["message"]["content"]
         if "```" in content:
@@ -2585,6 +2587,9 @@ def run_job_inner(job: Job, payload: dict[str, Any]) -> None:
             return
 
         expanded = expand_topic_with_llm(payload, job)
+        if finish_if_canceled(job):
+            job.outputs = collect_output_items(job)
+            return
         params = {
             "topic": expanded["topic"],
             "count": int(profile["count"]),
@@ -2819,6 +2824,14 @@ class Handler(BaseHTTPRequestHandler):
                 json_response(self, job.as_dict())
                 return
             job.request_cancel()
+            with job.process_lock:
+                has_process = job.current_process is not None and job.current_process.poll() is None
+            if job.status == "queued" or not has_process:
+                job.status = "canceled"
+                job.summary = "Task canceled."
+                job.append("Task canceled before a local process was started.")
+                json_response(self, job.as_dict())
+                return
             if job.status == "queued":
                 job.status = "canceled"
                 job.summary = "任务已在排队时终止。"
