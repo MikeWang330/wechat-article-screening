@@ -359,6 +359,56 @@ HTML = r"""<!doctype html>
       grid-template-columns: 1fr 1fr;
       gap: 12px;
     }
+    .intensity-options {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .intensity-option {
+      position: relative;
+      min-height: 58px;
+      padding: 10px 11px;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--text);
+      cursor: pointer;
+    }
+    .intensity-option:hover {
+      border-color: #94c8bd;
+      background: #f7fbf9;
+    }
+    .intensity-option input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .intensity-option:has(input:checked) {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(13,117,104,0.09);
+      background: #f1faf7;
+    }
+    .intensity-main {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+    .intensity-cap {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+    .intensity-desc {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+    }
     .check {
       display: flex;
       align-items: center;
@@ -923,17 +973,39 @@ HTML = r"""<!doctype html>
                 <input id="endDate" type="date">
               </div>
             </div>
-            <div class="row">
-              <div>
-                <label for="count">目标篇数</label>
-                <input id="count" type="number" min="1" max="100" value="20">
-              </div>
-              <div>
-                <label for="mode">搜索模式</label>
-                <select id="mode">
-                  <option value="slow">认真搜索</option>
-                  <option value="fast">快速预览</option>
-                </select>
+            <div class="field">
+              <label>筛选强度</label>
+              <div class="intensity-options" id="intensityOptions">
+                <label class="intensity-option">
+                  <input type="radio" name="intensity" value="1">
+                  <span class="intensity-main"><span>1.0 极严</span><span class="intensity-cap">最多 10</span></span>
+                  <span class="intensity-desc">只保留高度精准内容</span>
+                </label>
+                <label class="intensity-option">
+                  <input type="radio" name="intensity" value="0.8">
+                  <span class="intensity-main"><span>0.8 严格</span><span class="intensity-cap">最多 15</span></span>
+                  <span class="intensity-desc">偏质量，少量扩展</span>
+                </label>
+                <label class="intensity-option">
+                  <input type="radio" name="intensity" value="0.6" checked>
+                  <span class="intensity-main"><span>0.6 推荐</span><span class="intensity-cap">最多 20</span></span>
+                  <span class="intensity-desc">质量和覆盖平衡</span>
+                </label>
+                <label class="intensity-option">
+                  <input type="radio" name="intensity" value="0.4">
+                  <span class="intensity-main"><span>0.4 宽松</span><span class="intensity-cap">最多 30</span></span>
+                  <span class="intensity-desc">扩大相关背景</span>
+                </label>
+                <label class="intensity-option">
+                  <input type="radio" name="intensity" value="0.2">
+                  <span class="intensity-main"><span>0.2 很宽</span><span class="intensity-cap">最多 40</span></span>
+                  <span class="intensity-desc">接受外围材料</span>
+                </label>
+                <label class="intensity-option">
+                  <input type="radio" name="intensity" value="0">
+                  <span class="intensity-main"><span>0 全量</span><span class="intensity-cap">最多 50</span></span>
+                  <span class="intensity-desc">最大召回，不硬凑</span>
+                </label>
               </div>
             </div>
             <div class="actions">
@@ -1022,6 +1094,23 @@ HTML = r"""<!doctype html>
 
     const el = (id) => document.getElementById(id);
     const settingIds = ["useLlm", "llmBaseUrl", "llmModel", "llmApiKey", "runMineru", "mineruToken"];
+    const intensityProfiles = {
+      "1": {cap: 10, label: "1.0 极严"},
+      "0.8": {cap: 15, label: "0.8 严格"},
+      "0.6": {cap: 20, label: "0.6 推荐"},
+      "0.4": {cap: 30, label: "0.4 宽松"},
+      "0.2": {cap: 40, label: "0.2 很宽"},
+      "0": {cap: 50, label: "0 全量"}
+    };
+
+    function selectedIntensity() {
+      const node = document.querySelector('input[name="intensity"]:checked');
+      return node ? node.value : "0.6";
+    }
+
+    function selectedIntensityProfile() {
+      return intensityProfiles[selectedIntensity()] || intensityProfiles["0.6"];
+    }
 
     function readSettings() {
       const data = {};
@@ -1153,7 +1242,7 @@ HTML = r"""<!doctype html>
       const collectedMatch = latestMatch(logs, /Collected\s+(\d+)\s+unique candidates/);
       const dateMatch = latestMatch(logs, /Date filter kept\s+(\d+)\s+of\s+(\d+)/);
       const coreMatch = latestMatch(logs, /Core topic filter\s+\([^)]+\)\s+kept\s+(\d+)\s+of\s+(\d+)\s+candidates/);
-      const poolMatch = latestMatch(logs, /Screening pool:\s+(\d+)\s+candidates for\s+(\d+)\s+final URLs/);
+      const poolMatch = latestMatch(logs, /Screening pool:\s+(\d+)\s+candidates for\s+(\d+)\s+(?:final URLs|result cap)/);
       const verifyMatch = latestMatch(logs, /Verify\s+(\d+)\/(\d+)/);
       const wroteMatch = latestMatch(logs, /Wrote\s+(\d+)\s+verified URLs/);
       const noUrl = logs.some((line) => /No usable WeChat URLs/.test(line));
@@ -1165,7 +1254,7 @@ HTML = r"""<!doctype html>
       const coreKept = coreMatch ? Number(coreMatch[1]) : dateKept;
       const coreTotal = coreMatch ? Number(coreMatch[2]) : dateKept;
       const pool = poolMatch ? Number(poolMatch[1]) : coreKept;
-      const target = poolMatch ? Number(poolMatch[2]) : Number(el("count").value || 20);
+      const target = poolMatch ? Number(poolMatch[2]) : selectedIntensityProfile().cap;
       const verified = wroteMatch ? Number(wroteMatch[1]) : resultCount;
 
       return {
@@ -1192,7 +1281,7 @@ HTML = r"""<!doctype html>
         verified: metric(
           verified,
           Math.max(target, pool, verified),
-          wroteMatch ? `目标 ${target} 条` : (verifyMatch ? `验证 ${verifyMatch[1]} / ${verifyMatch[2]}` : (noUrl ? "本轮没有原文链接" : "等待验证结果"))
+          wroteMatch ? `最多 ${target} 条` : (verifyMatch ? `验证 ${verifyMatch[1]} / ${verifyMatch[2]}` : (noUrl ? "本轮没有原文链接" : "等待验证结果"))
         )
       };
     }
@@ -1560,8 +1649,7 @@ HTML = r"""<!doctype html>
         topic: el("topic").value.trim(),
         start_date: selectedRange.start_date,
         end_date: selectedRange.end_date,
-        count: Number(el("count").value || 20),
-        mode: el("mode").value,
+        intensity: Number(selectedIntensity()),
         use_llm: el("useLlm").checked,
         llm_base_url: el("llmBaseUrl").value.trim(),
         llm_model: el("llmModel").value.trim(),
@@ -1610,7 +1698,7 @@ HTML = r"""<!doctype html>
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({
-          count: Number(el("count").value || 20),
+          intensity: Number(selectedIntensity()),
           run_mineru: el("runMineru").checked,
           mineru_token: el("mineruToken").value
         })
@@ -2212,6 +2300,81 @@ def latest_log_match(logs: list[str], pattern: str) -> re.Match[str] | None:
     return None
 
 
+INTENSITY_PROFILES: dict[float, dict[str, Any]] = {
+    1.0: {
+        "label": "1.0 极严",
+        "count": 10,
+        "min_rating": "strong",
+        "max_queries": 6,
+        "top_per_query": 8,
+        "pool_multiplier": 3,
+        "stop_after_empty_rounds": 2,
+    },
+    0.8: {
+        "label": "0.8 严格",
+        "count": 15,
+        "min_rating": "maybe",
+        "max_queries": 10,
+        "top_per_query": 10,
+        "pool_multiplier": 4,
+        "stop_after_empty_rounds": 3,
+    },
+    0.6: {
+        "label": "0.6 推荐",
+        "count": 20,
+        "min_rating": "maybe",
+        "max_queries": 14,
+        "top_per_query": 10,
+        "pool_multiplier": 5,
+        "stop_after_empty_rounds": 4,
+    },
+    0.4: {
+        "label": "0.4 宽松",
+        "count": 30,
+        "min_rating": "weak",
+        "max_queries": 18,
+        "top_per_query": 12,
+        "pool_multiplier": 5,
+        "stop_after_empty_rounds": 5,
+    },
+    0.2: {
+        "label": "0.2 很宽",
+        "count": 40,
+        "min_rating": "weak",
+        "max_queries": 22,
+        "top_per_query": 12,
+        "pool_multiplier": 6,
+        "stop_after_empty_rounds": 6,
+    },
+    0.0: {
+        "label": "0 全量",
+        "count": 50,
+        "min_rating": "weak",
+        "max_queries": 26,
+        "top_per_query": 15,
+        "pool_multiplier": 6,
+        "stop_after_empty_rounds": 8,
+    },
+}
+
+
+def intensity_profile(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        raw = float(payload.get("intensity", 0.6))
+    except (TypeError, ValueError):
+        raw = 0.6
+    key = min(INTENSITY_PROFILES, key=lambda value: abs(value - raw))
+    profile = dict(INTENSITY_PROFILES[key])
+    if "count" in payload and payload.get("count") not in (None, ""):
+        try:
+            profile["count"] = max(1, int(payload["count"]))
+        except (TypeError, ValueError):
+            pass
+    profile["value"] = key
+    profile["pool_size"] = int(profile["count"]) * int(profile["pool_multiplier"])
+    return profile
+
+
 def no_url_summary(job: Job) -> str:
     collected = latest_log_match(job.logs, r"Collected\s+(\d+)\s+unique candidates")
     kept = latest_log_match(job.logs, r"Date filter kept\s+(\d+)\s+of\s+(\d+)")
@@ -2267,6 +2430,12 @@ def run_job_inner(job: Job, payload: dict[str, Any]) -> None:
     job.started_at = time.strftime("%Y-%m-%d %H:%M:%S")
     job.summary = "任务运行中。"
     try:
+        profile = intensity_profile(payload)
+        job.append(
+            "Screening intensity: "
+            f"{profile['label']} (result_cap={profile['count']}, max_queries={profile['max_queries']}, "
+            f"top_per_query={profile['top_per_query']}, min_rating={profile['min_rating']})"
+        )
         retry_candidate_csv = str(payload.get("retry_candidate_csv", "")).strip()
         if retry_candidate_csv:
             candidate_csv = repo_path_from_log(retry_candidate_csv)
@@ -2282,10 +2451,12 @@ def run_job_inner(job: Job, payload: dict[str, Any]) -> None:
                 "--topic",
                 job.topic,
                 "--count",
-                str(int(payload.get("count") or 20)),
+                str(int(profile["count"])),
                 "--candidate-csv",
                 str(candidate_csv),
                 "--write-urls",
+                "--min-rating",
+                str(profile["min_rating"]),
                 "--min-delay",
                 "1",
                 "--max-delay",
@@ -2336,8 +2507,13 @@ def run_job_inner(job: Job, payload: dict[str, Any]) -> None:
         expanded = expand_topic_with_llm(payload, job)
         params = {
             "topic": expanded["topic"],
-            "count": int(payload.get("count") or 20),
-            "mode": payload.get("mode") or "slow",
+            "count": int(profile["count"]),
+            "mode": "slow",
+            "intensity": profile["value"],
+            "max_queries": int(profile["max_queries"]),
+            "top_per_query": int(profile["top_per_query"]),
+            "pool_size": int(profile["pool_size"]),
+            "min_rating": str(profile["min_rating"]),
             "start_date": payload.get("start_date") or "",
             "end_date": payload.get("end_date") or "",
             "extra_keywords": expanded["extra_keywords"],
@@ -2350,7 +2526,7 @@ def run_job_inner(job: Job, payload: dict[str, Any]) -> None:
             "max_delay": 7,
             "cache_ttl_hours": 24,
             "continue_after_block": False,
-            "stop_after_empty_rounds": 2,
+            "stop_after_empty_rounds": int(profile["stop_after_empty_rounds"]),
         }
         WORK_DIR.mkdir(exist_ok=True)
         params_path = WORK_DIR / f"web-job-{job.id}.json"

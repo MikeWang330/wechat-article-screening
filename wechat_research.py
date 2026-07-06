@@ -1114,8 +1114,12 @@ def select_screening_pool(
     mode: str = "slow",
 ) -> list[Candidate]:
     multiplier = screening_pool_multiplier(mode)
-    max_pool_size = max(count, count * multiplier)
-    target_pool_size = min(max(count, pool_size), max_pool_size)
+    if pool_size > 0:
+        max_pool_size = max(count, count * 8)
+        target_pool_size = min(max(count, pool_size), max_pool_size)
+    else:
+        max_pool_size = max(count, count * multiplier)
+        target_pool_size = min(max(count, pool_size), max_pool_size)
     return rank_for_screening(candidates)[:target_pool_size]
 
 
@@ -1847,6 +1851,8 @@ def load_params_file(args: argparse.Namespace) -> argparse.Namespace:
         "count": "count",
         "mode": "mode",
         "pool_size": "pool_size",
+        "max_queries": "max_queries",
+        "top_per_query": "top_per_query",
         "extra_keywords": "extra_keywords",
         "exclude_keywords": "exclude_keywords",
         "min_rating": "min_rating",
@@ -1943,7 +1949,7 @@ def main(argv: list[str]) -> int:
     print("Screening mode: general")
     print(
         f"Mode: {args.mode} "
-        f"(max_queries={max_queries}, top_per_query={top_per_query}, pool_cap={args.count * pool_multiplier})"
+        f"(max_queries={max_queries}, top_per_query={top_per_query}, pool_cap={pool_size}, result_cap={args.count})"
     )
     if start_date or end_date:
         print(
@@ -2017,7 +2023,7 @@ def main(argv: list[str]) -> int:
         )
 
     screening_pool = select_screening_pool(candidates, args.count, pool_size, mode=args.mode)
-    print(f"Screening pool: {len(screening_pool)} candidates for {args.count} final URLs.")
+    print(f"Screening pool: {len(screening_pool)} candidates for {args.count} result cap.")
 
     if not args.no_browser:
         print("Verifying redirect links in Chrome...")
@@ -2046,7 +2052,7 @@ def main(argv: list[str]) -> int:
     if len(final_candidates) < args.count:
         print(
             f"Only {len(final_candidates)} verified WeChat URLs with rating >= {args.min_rating} "
-            f"were found for the requested {args.count}."
+            f"were found under the result cap {args.count}."
         )
     csv_path, md_path, pool_csv_path = write_outputs(
         final_candidates,

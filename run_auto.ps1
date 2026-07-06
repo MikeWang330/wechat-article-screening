@@ -16,6 +16,10 @@ param(
 
     [int]$PoolSize = 0,
 
+    [int]$MaxQueries = 0,
+
+    [int]$TopPerQuery = 0,
+
     [ValidateSet("fast", "slow")]
     [string]$Mode = "slow",
 
@@ -88,6 +92,8 @@ if ($ParamsFile) {
     $value = Get-JsonValue $paramsData "min_rating"; if ($value -in @("weak", "maybe", "strong")) { $MinRating = [string]$value; $boundParameters["MinRating"] = $true }
     $value = Get-JsonValue $paramsData "extra_keywords"; if ($null -ne $value) { $ExtraKeywords = [string]$value; $boundParameters["ExtraKeywords"] = $true }
     $value = Get-JsonValue $paramsData "pool_size"; if ($null -ne $value) { $PoolSize = [int]$value; $boundParameters["PoolSize"] = $true }
+    $value = Get-JsonValue $paramsData "max_queries"; if ($null -ne $value) { $MaxQueries = [int]$value; $boundParameters["MaxQueries"] = $true }
+    $value = Get-JsonValue $paramsData "top_per_query"; if ($null -ne $value) { $TopPerQuery = [int]$value; $boundParameters["TopPerQuery"] = $true }
     $value = Get-JsonValue $paramsData "mode"; if ($value -in @("fast", "slow")) { $Mode = [string]$value; $boundParameters["Mode"] = $true }
     $value = Get-JsonValue $paramsData "recent_days"; if ($null -ne $value) { $RecentDays = [int]$value; $boundParameters["RecentDays"] = $true }
     $value = Get-JsonValue $paramsData "exclude_keywords"; if ($null -ne $value) { $ExcludeKeywords = [string]$value; $boundParameters["ExcludeKeywords"] = $true }
@@ -184,7 +190,10 @@ if (-not $NoMemory -and $MemoryFile -and (Test-Path -LiteralPath $MemoryFile)) {
     }
 }
 
-Write-Host "Auto mode: Stage=$Stage, Mode=$Mode, RecentDays=$RecentDays."
+Write-Host "Auto mode: Stage=$Stage, Mode=$Mode, RecentDays=$RecentDays, ResultCap=$Count."
+if ($MaxQueries -gt 0 -or $TopPerQuery -gt 0) {
+    Write-Host "Search budget: MaxQueries=$MaxQueries, TopPerQuery=$TopPerQuery, PoolSize=$PoolSize."
+}
 Write-Host "Quality rule: return accurate results only; do not pad weak matches."
 
 if ($Stage -eq "retry") {
@@ -226,6 +235,8 @@ $researchParams = [ordered]@{
     extra_keywords = $ExtraKeywords
     exclude_keywords = $ExcludeKeywords
     pool_size = $PoolSize
+    max_queries = $MaxQueries
+    top_per_query = $TopPerQuery
     sogou_verify_timeout = $SogouVerifyTimeout
     no_browser = [bool]$NoBrowser
     chrome_path = $ChromePath

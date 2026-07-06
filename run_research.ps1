@@ -7,6 +7,10 @@ param(
 
     [int]$PoolSize = 0,
 
+    [int]$MaxQueries = 0,
+
+    [int]$TopPerQuery = 0,
+
     [ValidateSet("fast", "slow")]
     [string]$Mode = "slow",
 
@@ -74,6 +78,8 @@ if ($ParamsFile) {
     $value = Get-JsonValue $paramsData "topic"; if ($null -ne $value) { $Topic = [string]$value }
     $value = Get-JsonValue $paramsData "count"; if ($null -ne $value) { $Count = [int]$value }
     $value = Get-JsonValue $paramsData "pool_size"; if ($null -ne $value) { $PoolSize = [int]$value }
+    $value = Get-JsonValue $paramsData "max_queries"; if ($null -ne $value) { $MaxQueries = [int]$value }
+    $value = Get-JsonValue $paramsData "top_per_query"; if ($null -ne $value) { $TopPerQuery = [int]$value }
     $value = Get-JsonValue $paramsData "mode"; if ($value -in @("fast", "slow")) { $Mode = [string]$value }
     $value = Get-JsonValue $paramsData "extra_keywords"; if ($null -ne $value) { $ExtraKeywords = [string]$value }
     $value = Get-JsonValue $paramsData "exclude_keywords"; if ($null -ne $value) { $ExcludeKeywords = [string]$value }
@@ -127,6 +133,8 @@ $pythonParams = [ordered]@{
     count = $Count
     mode = $Mode
     pool_size = $PoolSize
+    max_queries = $MaxQueries
+    top_per_query = $TopPerQuery
     extra_keywords = $ExtraKeywords
     exclude_keywords = $ExcludeKeywords
     min_rating = $MinRating
