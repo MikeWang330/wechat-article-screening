@@ -2042,6 +2042,8 @@ def main(argv: list[str]) -> int:
         screening_pool = dedupe_candidates(screening_pool)
 
     screening_pool = filter_candidates_by_date(screening_pool, start_date, end_date)
+    resolved_count = sum(1 for candidate in screening_pool if "mp.weixin.qq.com" in candidate.resolved_url)
+    print(f"Resolved WeChat URLs before final quality filter: {resolved_count}.")
     final_candidates = select_final_candidates(
         screening_pool,
         args.count,

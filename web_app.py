@@ -2377,7 +2377,7 @@ INTENSITY_PROFILES: dict[float, dict[str, Any]] = {
     1.0: {
         "label": "1.0 极严",
         "count": 10,
-        "min_rating": "strong",
+        "min_rating": "maybe",
         "max_queries": 6,
         "top_per_query": 8,
         "pool_multiplier": 3,
@@ -2451,6 +2451,13 @@ def intensity_profile(payload: dict[str, Any]) -> dict[str, Any]:
 def no_url_summary(job: Job) -> str:
     collected = latest_log_match(job.logs, r"Collected\s+(\d+)\s+unique candidates")
     kept = latest_log_match(job.logs, r"Date filter kept\s+(\d+)\s+of\s+(\d+)")
+    resolved = latest_log_match(job.logs, r"Resolved WeChat URLs before final quality filter:\s+(\d+)")
+    quality_empty = latest_log_match(job.logs, r"Only\s+0\s+verified WeChat URLs with rating >=\s+(\w+)")
+    if resolved and int(resolved.group(1)) > 0 and quality_empty:
+        return (
+            f"已解析出 {resolved.group(1)} 条微信原文链接，但当前筛选强度过严，最终没有保留。"
+            "请把强度调低一档后重试。"
+        )
     browser_failed = any(
         "Browser verification failed" in line or "Browser verification unavailable" in line
         for line in job.logs
