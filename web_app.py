@@ -359,55 +359,109 @@ HTML = r"""<!doctype html>
       grid-template-columns: 1fr 1fr;
       gap: 12px;
     }
-    .intensity-options {
+    .intensity-control {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 8px;
+      gap: 14px;
       margin-top: 8px;
-    }
-    .intensity-option {
-      position: relative;
-      min-height: 58px;
-      padding: 10px 11px;
+      padding: 14px 14px 12px;
       border: 1px solid var(--line-strong);
       border-radius: 8px;
       background: #fff;
-      color: var(--text);
-      cursor: pointer;
     }
-    .intensity-option:hover {
-      border-color: #94c8bd;
-      background: #f7fbf9;
-    }
-    .intensity-option input {
-      position: absolute;
-      opacity: 0;
-      pointer-events: none;
-    }
-    .intensity-option:has(input:checked) {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(13,117,104,0.09);
-      background: #f1faf7;
-    }
-    .intensity-main {
+    .intensity-readout {
       display: flex;
-      align-items: baseline;
+      align-items: flex-start;
       justify-content: space-between;
-      gap: 8px;
+      gap: 14px;
+    }
+    .intensity-current {
+      color: var(--text);
+      font-size: 18px;
       font-weight: 800;
       line-height: 1.2;
     }
-    .intensity-cap {
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 650;
+    .intensity-limit {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 0 9px;
+      border-radius: 999px;
+      background: #edf7f4;
+      color: var(--accent-dark);
+      font-size: 12px;
+      font-weight: 750;
       white-space: nowrap;
     }
-    .intensity-desc {
-      margin-top: 6px;
+    .intensity-range {
+      width: 100%;
+      min-height: 28px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .intensity-range:focus {
+      box-shadow: none;
+    }
+    .intensity-range::-webkit-slider-runnable-track {
+      height: 8px;
+      border-radius: 999px;
+      background: linear-gradient(
+        90deg,
+        var(--accent) 0%,
+        var(--accent) var(--intensity-position, 60%),
+        #dfe8e6 var(--intensity-position, 60%),
+        #dfe8e6 100%
+      );
+    }
+    .intensity-range::-webkit-slider-thumb {
+      appearance: none;
+      width: 22px;
+      height: 22px;
+      margin-top: -7px;
+      border: 3px solid #fff;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 2px 8px rgba(17, 34, 31, 0.25);
+    }
+    .intensity-range::-moz-range-track {
+      height: 8px;
+      border-radius: 999px;
+      background: #dfe8e6;
+    }
+    .intensity-range::-moz-range-progress {
+      height: 8px;
+      border-radius: 999px;
+      background: var(--accent);
+    }
+    .intensity-range::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      border: 3px solid #fff;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 2px 8px rgba(17, 34, 31, 0.25);
+    }
+    .intensity-scale {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 4px;
       color: var(--muted);
       font-size: 11px;
-      line-height: 1.35;
+      line-height: 1.2;
+      text-align: center;
+    }
+    .intensity-scale span:first-child { text-align: left; }
+    .intensity-scale span:last-child { text-align: right; }
+    .intensity-scale .active {
+      color: var(--accent-dark);
+      font-weight: 800;
+    }
+    .intensity-desc {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
     }
     .check {
       display: flex;
@@ -975,37 +1029,21 @@ HTML = r"""<!doctype html>
             </div>
             <div class="field">
               <label>筛选强度</label>
-              <div class="intensity-options" id="intensityOptions">
-                <label class="intensity-option">
-                  <input type="radio" name="intensity" value="1">
-                  <span class="intensity-main"><span>1.0 极严</span><span class="intensity-cap">最多 10</span></span>
-                  <span class="intensity-desc">只保留高度精准内容</span>
-                </label>
-                <label class="intensity-option">
-                  <input type="radio" name="intensity" value="0.8">
-                  <span class="intensity-main"><span>0.8 严格</span><span class="intensity-cap">最多 15</span></span>
-                  <span class="intensity-desc">偏质量，少量扩展</span>
-                </label>
-                <label class="intensity-option">
-                  <input type="radio" name="intensity" value="0.6" checked>
-                  <span class="intensity-main"><span>0.6 推荐</span><span class="intensity-cap">最多 20</span></span>
-                  <span class="intensity-desc">质量和覆盖平衡</span>
-                </label>
-                <label class="intensity-option">
-                  <input type="radio" name="intensity" value="0.4">
-                  <span class="intensity-main"><span>0.4 宽松</span><span class="intensity-cap">最多 30</span></span>
-                  <span class="intensity-desc">扩大相关背景</span>
-                </label>
-                <label class="intensity-option">
-                  <input type="radio" name="intensity" value="0.2">
-                  <span class="intensity-main"><span>0.2 很宽</span><span class="intensity-cap">最多 40</span></span>
-                  <span class="intensity-desc">接受外围材料</span>
-                </label>
-                <label class="intensity-option">
-                  <input type="radio" name="intensity" value="0">
-                  <span class="intensity-main"><span>0 全量</span><span class="intensity-cap">最多 50</span></span>
-                  <span class="intensity-desc">最大召回，不硬凑</span>
-                </label>
+              <div class="intensity-control" id="intensityControl">
+                <div class="intensity-readout">
+                  <div class="intensity-current" id="intensityTitle">0.6 推荐</div>
+                  <div class="intensity-limit" id="intensityCap">最多 20 篇</div>
+                </div>
+                <input class="intensity-range" id="intensityRange" type="range" min="0" max="5" step="1" value="3" aria-label="筛选强度">
+                <div class="intensity-scale" id="intensityScale">
+                  <span>0</span>
+                  <span>0.2</span>
+                  <span>0.4</span>
+                  <span>0.6</span>
+                  <span>0.8</span>
+                  <span>1.0</span>
+                </div>
+                <div class="intensity-desc" id="intensityDesc">质量和覆盖平衡，不会为了凑数加入弱相关内容。</div>
               </div>
             </div>
             <div class="actions">
@@ -1095,21 +1133,36 @@ HTML = r"""<!doctype html>
     const el = (id) => document.getElementById(id);
     const settingIds = ["useLlm", "llmBaseUrl", "llmModel", "llmApiKey", "runMineru", "mineruToken"];
     const intensityProfiles = {
-      "1": {cap: 10, label: "1.0 极严"},
-      "0.8": {cap: 15, label: "0.8 严格"},
-      "0.6": {cap: 20, label: "0.6 推荐"},
-      "0.4": {cap: 30, label: "0.4 宽松"},
-      "0.2": {cap: 40, label: "0.2 很宽"},
-      "0": {cap: 50, label: "0 全量"}
+      "1": {cap: 10, label: "1.0 极严", desc: "只保留高度精准内容，数量会明显更少。"},
+      "0.8": {cap: 15, label: "0.8 严格", desc: "偏质量，少量扩展，适合要做结论型判断。"},
+      "0.6": {cap: 20, label: "0.6 推荐", desc: "质量和覆盖平衡，不会为了凑数加入弱相关内容。"},
+      "0.4": {cap: 30, label: "0.4 宽松", desc: "扩大相关背景，适合先看行业上下文。"},
+      "0.2": {cap: 40, label: "0.2 很宽", desc: "接受外围材料，适合探索早期线索。"},
+      "0": {cap: 50, label: "0 全量", desc: "最大召回，但仍过滤垃圾内容和不可访问链接。"}
     };
+    const intensitySteps = ["0", "0.2", "0.4", "0.6", "0.8", "1"];
 
     function selectedIntensity() {
-      const node = document.querySelector('input[name="intensity"]:checked');
-      return node ? node.value : "0.6";
+      const index = Math.max(0, Math.min(intensitySteps.length - 1, Number(el("intensityRange").value || 3)));
+      return intensitySteps[index] || "0.6";
     }
 
     function selectedIntensityProfile() {
       return intensityProfiles[selectedIntensity()] || intensityProfiles["0.6"];
+    }
+
+    function syncIntensityControl() {
+      const range = el("intensityRange");
+      const profile = selectedIntensityProfile();
+      const index = Number(range.value || 3);
+      const position = (index / (intensitySteps.length - 1)) * 100;
+      range.style.setProperty("--intensity-position", `${position}%`);
+      el("intensityTitle").textContent = profile.label;
+      el("intensityCap").textContent = `最多 ${profile.cap} 篇`;
+      el("intensityDesc").textContent = profile.desc;
+      document.querySelectorAll("#intensityScale span").forEach((node, itemIndex) => {
+        node.classList.toggle("active", itemIndex === index);
+      });
     }
 
     function readSettings() {
@@ -1137,6 +1190,8 @@ HTML = r"""<!doctype html>
     }
 
     applySettings(JSON.parse(localStorage.getItem(settingsKey) || "{}"));
+    syncIntensityControl();
+    el("intensityRange").addEventListener("input", syncIntensityControl);
 
     function formatDate(date) {
       const year = date.getFullYear();
