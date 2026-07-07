@@ -1205,11 +1205,6 @@ def find_chrome_candidates() -> list[str]:
     return found_items
 
 
-def find_chrome() -> str | None:
-    candidates = find_chrome_candidates()
-    return candidates[0] if candidates else None
-
-
 def free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
