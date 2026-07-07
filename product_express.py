@@ -90,9 +90,11 @@ def now_id() -> str:
 
 
 def product_search_topic(payload: dict[str, Any]) -> str:
+    brand = str(payload.get("brand_name", "")).strip()
+    product = str(payload.get("product_name", "")).strip()
     pieces = [
-        str(payload.get("brand_name", "")).strip(),
-        str(payload.get("product_name", "")).strip(),
+        "" if brand and brand in product else brand,
+        product,
         str(payload.get("category_keyword", "")).strip(),
         "新品",
         "上新",
@@ -110,6 +112,72 @@ def product_search_topic(payload: dict[str, Any]) -> str:
         seen.add(piece)
         result.append(piece)
     return " ".join(result)
+
+
+def product_keyword_variants(payload: dict[str, Any]) -> list[str]:
+    product = str(payload.get("product_name", "")).strip()
+    brand = str(payload.get("brand_name", "")).strip()
+    category = str(payload.get("category_keyword", "")).strip()
+    aliases = re.split(r"[\s/｜|、,，]+", product)
+    aliases = [item for item in aliases if item and item != brand]
+    flavor_words = [item for item in aliases if any(key in item for key in ("味", "口味", "柠檬", "桃", "茶", "莓", "橙", "葡萄"))]
+    pieces = [
+        product_search_topic(payload),
+        " ".join(item for item in [brand, "新品"] if item),
+        " ".join(item for item in [brand, "上新"] if item),
+        " ".join(item for item in [brand, "新口味"] if item),
+        " ".join(item for item in [brand, category] if item),
+        " ".join(item for item in [category, "新品"] if item),
+    ]
+    for word in flavor_words[:3]:
+        pieces.append(f"{word} 饮料")
+    for alias in aliases[:3]:
+        pieces.append(alias)
+    seen: set[str] = set()
+    variants: list[str] = []
+    for piece in pieces:
+        compact = re.sub(r"\s+", " ", piece).strip()
+        if not compact or compact in seen:
+            continue
+        seen.add(compact)
+        variants.append(compact)
+    return variants
+
+
+def fallback_attempts(payload: dict[str, Any], limit: int = 15) -> list[dict[str, Any]]:
+    try:
+        selected_intensity = float(payload.get("intensity", 0.6))
+    except (TypeError, ValueError):
+        selected_intensity = 0.6
+    try:
+        selected_days = int(payload.get("range_days", 90))
+    except (TypeError, ValueError):
+        selected_days = 90
+
+    days_order = [selected_days, 30, 90, 180, 365]
+    intensities = [selected_intensity, 0.6, 0.4, 0.2, 0.0]
+    keywords = product_keyword_variants(payload)
+    attempts: list[dict[str, Any]] = []
+    seen: set[tuple[str, int, float]] = set()
+
+    def add(topic: str, days: int, intensity: float, reason: str) -> None:
+        key = (topic, days, intensity)
+        if key in seen or len(attempts) >= limit:
+            return
+        seen.add(key)
+        attempts.append({"topic": topic, "days": days, "intensity": intensity, "reason": reason})
+
+    base_topic = keywords[0] if keywords else product_search_topic(payload)
+    add(base_topic, selected_days, selected_intensity, "原始条件")
+    for topic in keywords[1:]:
+        add(topic, selected_days, selected_intensity, "自动放宽关键词")
+    for days in days_order:
+        if days >= selected_days:
+            add(base_topic, days, selected_intensity, "自动放宽时间范围")
+    for intensity in intensities:
+        if intensity <= selected_intensity:
+            add(base_topic, max(selected_days, 90), intensity, "自动降低筛选强度")
+    return attempts
 
 
 def confidence_from_sources(sources: list[dict[str, str]]) -> str:
@@ -238,6 +306,7 @@ def build_report_markdown(
     sources: list[dict[str, str]],
     llm_result: dict[str, str],
     run_outputs: list[dict[str, str]],
+    fallback: dict[str, Any] | None = None,
 ) -> str:
     product = fallback_text(payload.get("product_name", ""), "未命名新品")
     brand = fallback_text(payload.get("brand_name", ""), "未填写")
@@ -258,6 +327,34 @@ def build_report_markdown(
     output_rows = [["类型", "位置"]]
     for item in run_outputs:
         output_rows.append([item.get("label", ""), item.get("path", "")])
+    fallback = fallback or {}
+    attempt_rows = [["搜索词", "时间范围", "筛选强度", "触发原因"]]
+    for item in fallback.get("attempts", []):
+        attempt_rows.append([
+            str(item.get("topic", "")),
+            str(item.get("date_range", item.get("days", ""))),
+            str(item.get("intensity", "")),
+            str(item.get("reason", "")),
+        ])
+    if len(attempt_rows) == 1:
+        attempt_rows.append(["未记录", "", "", ""])
+    reason_rows = [["失败原因"]]
+    for reason in fallback.get("failure_reasons", []):
+        reason_rows.append([str(reason)])
+    if len(reason_rows) == 1:
+        reason_rows.append(["未记录明确失败原因"])
+    filtered_rows = [["标题", "来源", "链接", "被过滤原因", "可手动恢复"]]
+    for item in fallback.get("filtered_items", [])[:30]:
+        filtered_rows.append([
+            str(item.get("title", "")),
+            str(item.get("source", "")),
+            str(item.get("url", "")),
+            str(item.get("reason", "")),
+            "是" if item.get("recoverable", True) else "否",
+        ])
+    if len(filtered_rows) == 1:
+        filtered_rows.append(["无", "", "", "", ""])
+    report_type = fallback.get("report_type") or ("新品线索报告" if not sources else "新品文章报告")
 
     llm_text = llm_result.get("text", "").strip()
     if llm_result.get("status") != "ok":
@@ -268,8 +365,35 @@ def build_report_markdown(
 - 生成时间：{generated_at}
 - 品牌：{brand}
 - 品类关键词：{category}
+- 报告类型：{report_type}
 - 数据可信度：{confidence}（{confidence_note(confidence)}）
 - 高级分析状态：{llm_result.get("status", "disabled")}
+
+## 0. 兜底和失败说明
+
+- 微信公众号深度文章是否充足：{"是" if sources else "否，当前报告主要基于有限公开线索"}
+- 自动兜底：已按关键词、时间范围和筛选强度进行尝试
+- 人工确认提示：未找到可靠公开信息的字段需要人工确认
+
+### 本次尝试过的条件
+
+{markdown_table(attempt_rows)}
+
+### 找不到结果或结果不足的原因
+
+{markdown_table(reason_rows)}
+
+### 被过滤文章
+
+{markdown_table(filtered_rows)}
+
+### 建议下一步
+
+- 使用品牌名而不是具体产品名搜索
+- 换更宽泛的品类关键词
+- 扩大时间范围
+- 降低筛选强度
+- 在页面中使用“我有文章链接，手动补充”
 
 ## 1. 新品基础信息
 
@@ -453,7 +577,8 @@ def write_product_report(
         "text": "高级分析未启用：未配置 LLM API Key。",
     }
 
-    markdown = build_report_markdown(payload, sources, llm_result, outputs)
+    fallback = dict(job_data.get("fallback") or {})
+    markdown = build_report_markdown(payload, sources, llm_result, outputs, fallback)
     title = f"新品速递报告：{product}"
     html_text = markdown_to_html(markdown, title)
 
@@ -472,6 +597,10 @@ def write_product_report(
         "confidence_note": confidence_note(confidence_from_sources(sources)),
         "source_count": len(sources),
         "sources": sources,
+        "fallback": fallback,
+        "failure_reasons": fallback.get("failure_reasons", []),
+        "filtered_items": fallback.get("filtered_items", []),
+        "report_type": fallback.get("report_type") or ("新品线索报告" if not sources else "新品文章报告"),
         "llm_status": llm_result.get("status", "disabled"),
         "sections": REPORT_SECTIONS,
         "paths": {

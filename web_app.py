@@ -1026,6 +1026,63 @@ HTML = r"""<!doctype html>
       color: var(--muted);
       line-height: 1.7;
     }
+    .manual-url-box {
+      margin-top: 14px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfdfb;
+    }
+    .manual-url-box summary {
+      color: var(--accent-dark);
+    }
+    .manual-url-box textarea {
+      min-height: 92px;
+    }
+    .product-fallback-note {
+      display: none;
+      padding: 12px;
+      border: 1px solid rgba(169, 190, 184, 0.7);
+      border-radius: 8px;
+      background: #fbfdfb;
+      color: var(--muted);
+      line-height: 1.65;
+    }
+    .product-fallback-note.visible {
+      display: grid;
+      gap: 8px;
+    }
+    .fallback-title {
+      color: var(--text);
+      font-weight: 800;
+    }
+    .fallback-list {
+      display: grid;
+      gap: 5px;
+      margin: 0;
+      padding-left: 18px;
+    }
+    .filter-section-title {
+      margin-top: 8px;
+      color: var(--text);
+      font-weight: 800;
+      font-size: 13px;
+    }
+    .filtered-item {
+      background: #fffaf6;
+      border-color: #ead7c8;
+    }
+    .recover-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 0 8px;
+      border-radius: 999px;
+      background: rgba(13,117,104,0.08);
+      color: var(--accent-dark);
+      font-size: 12px;
+      font-weight: 750;
+    }
     .hint {
       color: var(--muted);
       font-size: 12px;
@@ -1228,11 +1285,20 @@ HTML = r"""<!doctype html>
             </select>
             <label for="productIntensity">筛选强度</label>
             <select id="productIntensity">
+              <option value="1">1.0 极严，最多 10 篇</option>
               <option value="0.8">0.8 严格，优先可信来源</option>
               <option value="0.6" selected>0.6 推荐，质量和覆盖平衡</option>
               <option value="0.4">0.4 宽松，扩大背景材料</option>
+              <option value="0.2">0.2 很宽，扩大线索范围</option>
+              <option value="0">0 全量，最大召回</option>
             </select>
             <div class="product-note">如果需要搜狗验证，程序会沿用原逻辑打开 Chrome，请在窗口里完成验证。没有 LLM 或 MinerU 也会生成基础报告，并标注高级分析未启用。</div>
+            <details class="manual-url-box">
+              <summary>我有文章链接，手动补充</summary>
+              <label for="manualProductUrls">粘贴公众号链接或网页链接</label>
+              <textarea id="manualProductUrls" placeholder="每行一个链接。填写后会优先走手动 URL 解析流程。"></textarea>
+              <div class="hint">适合搜索结果太少、搜狗验证不稳定，或者你已经有可靠文章链接时使用。</div>
+            </details>
             <div class="actions">
               <button type="submit">生成新品报告</button>
               <button class="secondary" type="button" id="refreshProductsBtn">刷新列表</button>
@@ -1255,6 +1321,7 @@ HTML = r"""<!doctype html>
               </div>
               <div class="product-note" id="productJobSummary">暂无运行中的新品报告。</div>
               <div class="report-links" id="productReportLinks"></div>
+              <div class="product-fallback-note" id="productFallbackNote"></div>
               <div class="results-list" id="productSourceList"></div>
             </div>
           </div>
@@ -1714,18 +1781,89 @@ HTML = r"""<!doctype html>
       }
     }
 
+    function renderProductFallback(report) {
+      const container = el("productFallbackNote");
+      container.textContent = "";
+      container.classList.remove("visible");
+      if (!report) return;
+      const fallback = report.fallback || {};
+      const reasons = report.failure_reasons || fallback.failure_reasons || [];
+      const attempts = fallback.attempts || [];
+      const filtered = report.filtered_items || fallback.filtered_items || [];
+      if (!reasons.length && !attempts.length && !filtered.length) return;
+
+      container.classList.add("visible");
+      const title = document.createElement("div");
+      title.className = "fallback-title";
+      title.textContent = report.report_type || fallback.report_type || "新品线索报告";
+      container.appendChild(title);
+
+      if (reasons.length) {
+        const list = document.createElement("ul");
+        list.className = "fallback-list";
+        reasons.slice(0, 4).forEach((reason) => {
+          const item = document.createElement("li");
+          item.textContent = reason;
+          list.appendChild(item);
+        });
+        container.appendChild(list);
+      }
+
+      const meta = [];
+      if (attempts.length > 1) meta.push(`已自动尝试 ${attempts.length} 轮兜底`);
+      if (filtered.length) meta.push(`${filtered.length} 条候选被过滤`);
+      if (meta.length) {
+        const note = document.createElement("div");
+        note.textContent = meta.join("，") + "。完整说明已写入报告。";
+        container.appendChild(note);
+      }
+    }
+
     function renderProductSources(report) {
       const container = el("productSourceList");
       container.textContent = "";
       const sources = report && report.sources ? report.sources : [];
+      const fallback = report && report.fallback ? report.fallback : {};
+      const filtered = report && report.filtered_items ? report.filtered_items : (fallback.filtered_items || []);
       if (!sources.length) {
         const empty = document.createElement("div");
         empty.className = "empty-results";
         empty.textContent = "暂时没有可展示的来源链接。报告里会标注未找到可靠公开信息。";
         container.appendChild(empty);
-        return;
+      } else {
+        sources.slice(0, 8).forEach((item, index) => addResultItem(container, item, index));
       }
-      sources.slice(0, 8).forEach((item, index) => addResultItem(container, item, index));
+      if (filtered.length) {
+        const title = document.createElement("div");
+        title.className = "filter-section-title";
+        title.textContent = "被过滤的候选";
+        container.appendChild(title);
+        filtered.slice(0, 8).forEach((item, index) => {
+          const wrapper = document.createElement("div");
+          wrapper.className = "result-item filtered-item";
+
+          const titleNode = document.createElement(item.url ? "a" : "div");
+          titleNode.className = "result-title";
+          titleNode.textContent = item.title || `候选文章 ${index + 1}`;
+          if (item.url) {
+            titleNode.href = item.url;
+            titleNode.target = "_blank";
+            titleNode.rel = "noreferrer";
+          }
+          wrapper.appendChild(titleNode);
+
+          const meta = document.createElement("div");
+          meta.className = "result-meta";
+          meta.textContent = [item.source, item.reason].filter(Boolean).join(" · ") || "未进入最终结果";
+          wrapper.appendChild(meta);
+
+          const recover = document.createElement("span");
+          recover.className = "recover-pill";
+          recover.textContent = item.recoverable ? "可手动恢复" : "不建议恢复";
+          wrapper.appendChild(recover);
+          container.appendChild(wrapper);
+        });
+      }
     }
 
     function renderProductJob(job) {
@@ -1736,7 +1874,13 @@ HTML = r"""<!doctype html>
       el("productJobSummary").textContent = job.summary || "新品报告运行中。";
       if (job.product_report && job.product_report.id) {
         productReportLinks(job.product_report);
+        renderProductFallback(job.product_report);
         renderProductSources(job.product_report);
+      } else if (job.status === "queued" || job.status === "running") {
+        el("productReportLinks").textContent = "";
+        el("productFallbackNote").textContent = "";
+        el("productFallbackNote").classList.remove("visible");
+        el("productSourceList").textContent = "";
       }
       if (job.status === "done" || job.status === "failed" || job.status === "canceled") {
         clearInterval(productTimer);
@@ -2056,7 +2200,9 @@ HTML = r"""<!doctype html>
         category_keyword: el("categoryKeyword").value.trim(),
         start_date: range.start_date,
         end_date: range.end_date,
+        range_days: Number(el("productTimeRange").value || 90),
         intensity: Number(el("productIntensity").value || 0.6),
+        manual_urls: el("manualProductUrls").value,
         use_llm: el("useLlm").checked,
         llm_base_url: el("llmBaseUrl").value.trim(),
         llm_model: el("llmModel").value.trim(),
@@ -2066,6 +2212,8 @@ HTML = r"""<!doctype html>
       };
       saveSettings();
       el("productReportLinks").textContent = "";
+      el("productFallbackNote").textContent = "";
+      el("productFallbackNote").classList.remove("visible");
       el("productSourceList").textContent = "";
       renderProductJob({
         id: "提交中",
@@ -2450,12 +2598,16 @@ def result_date(row: dict[str, str]) -> str:
 def read_result_items(job: Job, limit: int = 50) -> list[dict[str, str]]:
     items: list[dict[str, str]] = []
     seen: set[str] = set()
+    verified_urls = read_verified_urls()
+    verified_set = set(verified_urls)
     csv_value = latest_log_value(job.logs, "Candidate CSV:")
     rows = read_csv_rows(repo_path_from_log(csv_value)) if csv_value else []
 
     for row in rows:
         url = str(row.get("resolved_url") or row.get("url") or "").strip()
         if "mp.weixin.qq.com" not in url or url in seen:
+            continue
+        if url not in verified_set:
             continue
         items.append(
             {
@@ -2472,7 +2624,7 @@ def read_result_items(job: Job, limit: int = 50) -> list[dict[str, str]]:
     if items:
         return items
 
-    for url in read_verified_urls():
+    for url in verified_urls:
         if url in seen:
             continue
         items.append({"title": f"微信文章 {len(items) + 1}", "url": url, "source": "", "date": ""})
@@ -2480,6 +2632,13 @@ def read_result_items(job: Job, limit: int = 50) -> list[dict[str, str]]:
         if len(items) >= limit:
             break
     return items
+
+
+def reset_current_urls() -> None:
+    try:
+        (ROOT / "urls.txt").write_text("", encoding="utf-8")
+    except OSError:
+        pass
 
 
 def add_output_item(items: list[dict[str, str]], label: str, path: Path | str) -> None:
@@ -2851,6 +3010,120 @@ def no_url_summary(job: Job) -> str:
     return "搜索完成，但没有拿到可直接解析的微信原文链接。请查看 candidates/ 候选表。"
 
 
+def date_range_for_days(days: int) -> dict[str, str]:
+    end = dt.date.today()
+    start = end - dt.timedelta(days=max(1, days))
+    return {"start_date": start.isoformat(), "end_date": end.isoformat()}
+
+
+def extract_urls_from_text(value: str) -> list[str]:
+    urls = re.findall(r"https?://[^\s<>'\"，,；;]+", value or "")
+    seen: set[str] = set()
+    result: list[str] = []
+    for url in urls:
+        cleaned = url.strip().rstrip(").，,；;")
+        if cleaned and cleaned not in seen:
+            seen.add(cleaned)
+            result.append(cleaned)
+    return result
+
+
+def search_failure_reasons(job: Job, payload: dict[str, Any]) -> list[str]:
+    logs = "\n".join(job.logs)
+    reasons: list[str] = []
+    collected = latest_log_match(job.logs, r"Collected\s+(\d+)\s+unique candidates")
+    date_match = latest_log_match(job.logs, r"Date filter kept\s+(\d+)\s+of\s+(\d+)")
+    core_match = latest_log_match(job.logs, r"Core topic filter\s+\([^)]+\)\s+kept\s+(\d+)\s+of\s+(\d+)")
+    wrote = latest_log_match(job.logs, r"Wrote\s+(\d+)\s+verified URLs")
+    if "Search collection failed" in logs or (collected and int(collected.group(1)) == 0):
+        reasons.append("搜索阶段没有候选。")
+    if collected and 0 < int(collected.group(1)) < 5:
+        reasons.append(f"候选文章太少，仅找到 {collected.group(1)} 条。")
+    if date_match and int(date_match.group(1)) == 0 and int(date_match.group(2)) > 0:
+        reasons.append("时间范围不符合，候选文章被时间过滤排除。")
+    if core_match and int(core_match.group(1)) == 0 and int(core_match.group(2)) > 0:
+        reasons.append("主题相关性不足，候选文章未通过核心主题筛选。")
+    if "Only 0 verified WeChat URLs with rating" in logs or "Screening pool: 0 candidates" in logs:
+        reasons.append("商业分析价值不足或当前筛选强度过高。")
+    if "No usable WeChat URLs" in logs or (wrote and int(wrote.group(1)) == 0):
+        reasons.append("微信原文链接不可访问或没有可用原文链接。")
+    if "anti-spider" in logs or "Sogou verification is required" in logs:
+        reasons.append("搜狗验证未完成。")
+    if "Browser verification failed" in logs or "Browser verification unavailable" in logs:
+        reasons.append("本机 Chrome 验证窗口不可用或启动失败。")
+    if "daily web crawl limit" in logs or "MinerU" in logs and "limit" in logs.lower():
+        reasons.append("MinerU 额度不足。")
+    if payload.get("use_llm") and not str(payload.get("llm_api_key", "")).strip():
+        reasons.append("LLM API Key 未配置，高级分析未启用。")
+    if not reasons and job.status == "failed":
+        reasons.append(job.summary or "任务失败，但日志中没有更具体的原因。")
+    return reasons or ["结果不足，已生成低可信度新品线索报告。"]
+
+
+def filtered_candidate_items(job: Job, limit: int = 30) -> list[dict[str, Any]]:
+    candidate_csv = latest_log_value(job.logs, "Candidate CSV:")
+    screened_csv = latest_log_value(job.logs, "Screened pool CSV:")
+    if not candidate_csv:
+        return []
+    candidate_path = repo_path_from_log(candidate_csv)
+    screened_keys: set[str] = set()
+    if screened_csv:
+        screened_path = repo_path_from_log(screened_csv)
+        if screened_path.exists():
+            try:
+                with screened_path.open("r", encoding="utf-8-sig", errors="replace", newline="") as handle:
+                    for row in csv.DictReader(handle):
+                        screened_keys.add(row.get("sogou_url") or row.get("resolved_url") or row.get("title", ""))
+            except OSError:
+                pass
+    items: list[dict[str, Any]] = []
+    if not candidate_path.exists():
+        return items
+    try:
+        with candidate_path.open("r", encoding="utf-8-sig", errors="replace", newline="") as handle:
+            for row in csv.DictReader(handle):
+                key = row.get("sogou_url") or row.get("resolved_url") or row.get("title", "")
+                if key in screened_keys:
+                    continue
+                reason = row.get("reason", "").strip()
+                resolve_status = row.get("resolve_status", "").strip()
+                rating = row.get("rating", "").strip()
+                if not reason:
+                    if "expired" in resolve_status or "过期" in resolve_status or "deleted" in resolve_status:
+                        reason = "微信原文链接不可访问。"
+                    elif rating in {"weak", "reject", "bad"}:
+                        reason = "主题相关性或商业分析价值不足。"
+                    else:
+                        reason = "未进入最终筛选池。"
+                items.append(
+                    {
+                        "title": row.get("title", "").strip() or "未命名候选",
+                        "source": row.get("source", "").strip(),
+                        "url": row.get("resolved_url", "").strip() or row.get("sogou_url", "").strip(),
+                        "reason": reason,
+                        "recoverable": bool(row.get("resolved_url") or row.get("sogou_url")),
+                    }
+                )
+                if len(items) >= limit:
+                    break
+    except OSError:
+        return []
+    return items
+
+
+def build_product_fallback(job: Job, attempts: list[dict[str, Any]], payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "report_type": "新品文章报告" if job.results else "新品线索报告",
+        "attempts": attempts,
+        "failure_reasons": search_failure_reasons(job, payload),
+        "filtered_items": filtered_candidate_items(job),
+    }
+
+
+def write_manual_urls(urls: list[str]) -> None:
+    (ROOT / "urls.txt").write_text("\n".join(urls) + "\n", encoding="utf-8")
+
+
 def run_job(job: Job, payload: dict[str, Any]) -> None:
     job.summary = "任务已进入队列，等待前一个任务结束。"
     with JOB_SEMAPHORE:
@@ -2873,15 +3146,73 @@ def run_product_report_job(job: Job, payload: dict[str, Any]) -> None:
             "brand_name": str(payload.get("brand_name", "")).strip(),
             "category_keyword": str(payload.get("category_keyword", "")).strip(),
         }
-        search_payload = dict(payload)
-        search_payload["topic"] = product_express.product_search_topic(product_payload)
-        search_payload.setdefault("run_mineru", False)
-        job.append(f"Product report search topic: {search_payload['topic']}")
-        run_job_inner(job, search_payload)
-        if job.status == "canceled":
-            return
-        search_failed = job.status == "failed"
-        search_summary = job.summary
+        executed_attempts: list[dict[str, Any]] = []
+        manual_urls = extract_urls_from_text(str(payload.get("manual_urls", "")))
+        if manual_urls:
+            job.status = "running"
+            job.started_at = time.strftime("%Y-%m-%d %H:%M:%S")
+            job.finished_at = ""
+            job.started_monotonic = time.monotonic()
+            job.finished_monotonic = 0.0
+            job.summary = f"已收到 {len(manual_urls)} 条手动链接，正在走手动解析流程。"
+            write_manual_urls(manual_urls)
+            job.append(f"Manual product URLs: {len(manual_urls)}")
+            command = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]
+            command.append(".\\run_manual.ps1" if payload.get("run_mineru") else ".\\run_html_only.ps1")
+            run_process(command, job, payload)
+            if finish_if_canceled(job):
+                return
+            job.results = read_result_items(job)
+            if not job.results:
+                job.results = [
+                    {"title": f"手动补充链接 {index + 1}", "url": url, "source": "手动补充", "date": ""}
+                    for index, url in enumerate(manual_urls)
+                ]
+            job.outputs = collect_output_items(job, include_latest_run=True)
+            executed_attempts.append(
+                {
+                    "topic": "手动补充 URL",
+                    "date_range": "用户提供",
+                    "intensity": "不适用",
+                    "reason": "用户手动补充链接",
+                }
+            )
+        else:
+            attempts = product_express.fallback_attempts(
+                {
+                    **product_payload,
+                    "intensity": payload.get("intensity", 0.6),
+                    "range_days": payload.get("range_days", 90),
+                }
+            )
+            for index, attempt in enumerate(attempts, start=1):
+                date_range = date_range_for_days(int(attempt.get("days", 90)))
+                search_payload = dict(payload)
+                search_payload["topic"] = str(attempt.get("topic") or product_express.product_search_topic(product_payload))
+                search_payload["start_date"] = date_range["start_date"]
+                search_payload["end_date"] = date_range["end_date"]
+                search_payload["intensity"] = float(attempt.get("intensity", payload.get("intensity", 0.6)))
+                search_payload.setdefault("run_mineru", False)
+                attempt_record = {
+                    **attempt,
+                    "date_range": f"{date_range['start_date']} 至 {date_range['end_date']}",
+                }
+                executed_attempts.append(attempt_record)
+                if index > 1:
+                    job.append(
+                        "Product fallback attempt "
+                        f"{index}/{len(attempts)}: {attempt_record['reason']} | "
+                        f"{attempt_record['topic']} | {attempt_record['date_range']} | "
+                        f"intensity={attempt_record['intensity']}"
+                    )
+                else:
+                    job.append(f"Product report search topic: {search_payload['topic']}")
+                run_job_inner(job, search_payload)
+                if job.status == "canceled":
+                    return
+                if job.results:
+                    break
+                job.append("Product fallback: no usable article found in this attempt.")
 
         job.append("Generating product express report.")
         llm_config = {
@@ -2889,8 +3220,13 @@ def run_product_report_job(job: Job, payload: dict[str, Any]) -> None:
             "model": str(payload.get("llm_model", "")).strip(),
             "api_key": str(payload.get("llm_api_key", "")).strip(),
         }
+        fallback = build_product_fallback(job, executed_attempts, payload)
+        if manual_urls and job.process_returncode != 0:
+            fallback["failure_reasons"] = [f"手动 URL 解析失败，退出码 {job.process_returncode}。"] + fallback.get("failure_reasons", [])
+        job_data = job.as_dict()
+        job_data["fallback"] = fallback
         try:
-            report = product_express.write_product_report(product_payload, job.as_dict(), llm_config)
+            report = product_express.write_product_report(product_payload, job_data, llm_config)
         except Exception as exc:
             job.status = "failed"
             job.summary = f"新品报告生成失败：{type(exc).__name__}: {exc}"
@@ -2901,11 +3237,15 @@ def run_product_report_job(job: Job, payload: dict[str, Any]) -> None:
         add_output_item(job.outputs, "新品报告 Markdown", report.get("paths", {}).get("markdown", ""))
         add_output_item(job.outputs, "新品报告 HTML", report.get("paths", {}).get("html", ""))
         add_output_item(job.outputs, "新品报告 JSON", report.get("paths", {}).get("json", ""))
-        if search_failed:
-            job.status = "failed"
-            job.summary = f"搜索流程失败，但已生成基础新品报告。原因：{search_summary}"
+        job.status = "done"
+        if not report.get("source_count"):
+            job.summary = "未找到足够文章，已生成低可信度新品线索报告。"
+        elif fallback.get("failure_reasons"):
+            job.summary = (
+                f"新品报告已生成，参考 {report.get('source_count', 0)} 条来源；"
+                "部分信息仍需人工确认。"
+            )
         else:
-            job.status = "done"
             job.summary = (
                 f"新品报告已生成，参考 {report.get('source_count', 0)} 条来源，"
                 f"数据可信度：{report.get('confidence', '低')}。"
@@ -2944,6 +3284,9 @@ def run_job_inner(job: Job, payload: dict[str, Any]) -> None:
     job.started_monotonic = time.monotonic()
     job.finished_monotonic = 0.0
     job.summary = "任务运行中。"
+    job.results = []
+    job.outputs = []
+    reset_current_urls()
     try:
         profile = intensity_profile(payload)
         job.append(
