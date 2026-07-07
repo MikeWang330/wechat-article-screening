@@ -23,6 +23,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+import product_express
+
 
 ROOT = Path(__file__).resolve().parent
 WORK_DIR = ROOT / "work"
@@ -958,6 +960,72 @@ HTML = r"""<!doctype html>
     .markdown-link:hover {
       background: var(--accent-dark);
     }
+    .product-grid {
+      display: grid;
+      grid-template-columns: minmax(360px, 430px) minmax(560px, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+    .product-card-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .product-card {
+      display: grid;
+      gap: 8px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfdfb;
+    }
+    .product-card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .product-name {
+      font-size: 16px;
+      font-weight: 800;
+      line-height: 1.35;
+    }
+    .product-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .confidence-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 0 9px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent-dark);
+      font-size: 12px;
+      font-weight: 760;
+      white-space: nowrap;
+    }
+    .product-status-panel {
+      display: grid;
+      gap: 12px;
+    }
+    .report-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .product-note {
+      padding: 12px;
+      border-radius: 8px;
+      background: #f1f5f2;
+      color: var(--muted);
+      line-height: 1.7;
+    }
     .hint {
       color: var(--muted);
       font-size: 12px;
@@ -999,7 +1067,7 @@ HTML = r"""<!doctype html>
       .nav-buttons { justify-content: flex-start; }
       .footer-note { white-space: normal; }
       .main { padding: 20px 16px 32px; }
-      .topbar, .layout, .settings-grid { grid-template-columns: 1fr; }
+      .topbar, .layout, .settings-grid, .product-grid { grid-template-columns: 1fr; }
       .history-toggle { top: 132px; }
       .history-panel { top: 112px; bottom: 14px; }
       .funnel-grid, .step-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1020,6 +1088,7 @@ HTML = r"""<!doctype html>
       </div>
       <div class="nav-buttons">
         <button class="nav-button active" type="button" data-page="workbench">任务台</button>
+        <button class="nav-button" type="button" data-page="product">新品速递</button>
         <button class="nav-button" type="button" data-page="settings">设置</button>
       </div>
       <div class="footer-note">只在本机运行</div>
@@ -1133,6 +1202,64 @@ HTML = r"""<!doctype html>
           </div>
         </div>
       </section>
+      <section class="page" id="page-product">
+        <div class="topbar">
+          <div>
+            <h2>新品速递</h2>
+            <div class="subtitle">面向饮料商业分析部门：输入新品线索，自动搜索公众号文章，生成可追踪的新品报告。</div>
+          </div>
+          <span class="pill">本地验证模式</span>
+        </div>
+        <div class="product-grid">
+          <form class="panel" id="productForm">
+            <div class="panel-title">生成新品报告</div>
+            <label for="productName">新品名称</label>
+            <input id="productName" required placeholder="例如：东方树叶 新口味">
+            <label for="brandName">品牌名</label>
+            <input id="brandName" placeholder="例如：农夫山泉">
+            <label for="categoryKeyword">品类关键词</label>
+            <input id="categoryKeyword" placeholder="例如：电解质水 / 0糖饮料 / 茶饮">
+            <label for="productTimeRange">时间范围</label>
+            <select id="productTimeRange">
+              <option value="90" selected>过去三个月</option>
+              <option value="180">过去半年</option>
+              <option value="365">过去一年</option>
+              <option value="30">过去一个月</option>
+            </select>
+            <label for="productIntensity">筛选强度</label>
+            <select id="productIntensity">
+              <option value="0.8">0.8 严格，优先可信来源</option>
+              <option value="0.6" selected>0.6 推荐，质量和覆盖平衡</option>
+              <option value="0.4">0.4 宽松，扩大背景材料</option>
+            </select>
+            <div class="product-note">如果需要搜狗验证，程序会沿用原逻辑打开 Chrome，请在窗口里完成验证。没有 LLM 或 MinerU 也会生成基础报告，并标注高级分析未启用。</div>
+            <div class="actions">
+              <button type="submit">生成新品报告</button>
+              <button class="secondary" type="button" id="refreshProductsBtn">刷新列表</button>
+            </div>
+          </form>
+          <div class="run-column">
+            <div class="panel product-status-panel">
+              <div>
+                <div class="panel-title">最新发现新品</div>
+                <div class="hint">展示本地生成的新品报告，以及自动收集框架写入的数据。</div>
+              </div>
+              <div class="product-card-list" id="productDiscoveryList">
+                <div class="empty-results">正在读取新品列表...</div>
+              </div>
+            </div>
+            <div class="panel product-status-panel">
+              <div>
+                <div class="panel-title" id="productJobTitle">新品报告状态</div>
+                <div class="hint" id="productJobMeta">提交新品后，这里会显示搜索、验证和报告生成结果。</div>
+              </div>
+              <div class="product-note" id="productJobSummary">暂无运行中的新品报告。</div>
+              <div class="report-links" id="productReportLinks"></div>
+              <div class="results-list" id="productSourceList"></div>
+            </div>
+          </div>
+        </div>
+      </section>
       <section class="page" id="page-settings">
         <div class="topbar">
           <div>
@@ -1174,6 +1301,8 @@ HTML = r"""<!doctype html>
   <script>
     let currentJobId = "";
     let timer = null;
+    let currentProductJobId = "";
+    let productTimer = null;
     const settingsKey = "wechatResearchSettings";
 
     const el = (id) => document.getElementById(id);
@@ -1557,6 +1686,131 @@ HTML = r"""<!doctype html>
       container.textContent = "";
     }
 
+    function productDateRange() {
+      const days = Number(el("productTimeRange").value || 90);
+      const end = new Date();
+      const start = new Date();
+      start.setDate(start.getDate() - days);
+      return {start_date: formatDate(start), end_date: formatDate(end)};
+    }
+
+    function productReportLinks(report) {
+      const urls = report && report.urls ? report.urls : {};
+      const links = [
+        ["Markdown", urls.markdown],
+        ["HTML", urls.html],
+        ["JSON", urls.json]
+      ].filter((item) => item[1]);
+      const container = el("productReportLinks");
+      container.textContent = "";
+      for (const [label, url] of links) {
+        const link = document.createElement("a");
+        link.className = "markdown-link";
+        link.href = url;
+        link.target = "_blank";
+        link.rel = "noreferrer";
+        link.textContent = `打开 ${label}`;
+        container.appendChild(link);
+      }
+    }
+
+    function renderProductSources(report) {
+      const container = el("productSourceList");
+      container.textContent = "";
+      const sources = report && report.sources ? report.sources : [];
+      if (!sources.length) {
+        const empty = document.createElement("div");
+        empty.className = "empty-results";
+        empty.textContent = "暂时没有可展示的来源链接。报告里会标注未找到可靠公开信息。";
+        container.appendChild(empty);
+        return;
+      }
+      sources.slice(0, 8).forEach((item, index) => addResultItem(container, item, index));
+    }
+
+    function renderProductJob(job) {
+      if (!job) return;
+      currentProductJobId = job.id || currentProductJobId;
+      el("productJobTitle").textContent = job.topic || "新品报告状态";
+      el("productJobMeta").textContent = job.started_at ? `任务 ${job.id} · ${job.started_at}` : `任务 ${job.id || ""}`;
+      el("productJobSummary").textContent = job.summary || "新品报告运行中。";
+      if (job.product_report && job.product_report.id) {
+        productReportLinks(job.product_report);
+        renderProductSources(job.product_report);
+      }
+      if (job.status === "done" || job.status === "failed" || job.status === "canceled") {
+        clearInterval(productTimer);
+        productTimer = null;
+        loadProductReports();
+      }
+    }
+
+    function renderProductCards(reports, discoveries) {
+      const container = el("productDiscoveryList");
+      container.textContent = "";
+      const discoveryItems = discoveries && discoveries.items ? discoveries.items : [];
+      const cards = reports.length ? reports : discoveryItems;
+      if (!cards.length) {
+        const empty = document.createElement("div");
+        empty.className = "empty-results";
+        empty.textContent = "还没有新品报告。可以先在左侧输入新品名称生成第一份。";
+        container.appendChild(empty);
+        return;
+      }
+      cards.slice(0, 12).forEach((item) => {
+        const card = document.createElement("div");
+        card.className = "product-card";
+        const head = document.createElement("div");
+        head.className = "product-card-head";
+        const title = document.createElement("div");
+        title.className = "product-name";
+        title.textContent = item.product_name || item.title || "未命名新品";
+        const confidence = document.createElement("span");
+        confidence.className = "confidence-pill";
+        confidence.textContent = `可信度 ${item.confidence || "待确认"}`;
+        head.appendChild(title);
+        head.appendChild(confidence);
+        card.appendChild(head);
+
+        const meta = document.createElement("div");
+        meta.className = "product-meta";
+        const pieces = [
+          item.brand_name || "",
+          item.category_keyword || item.category || "",
+          item.created_at || item.discovered_at || "",
+          `${item.source_count || 0} 条来源`
+        ].filter(Boolean);
+        meta.textContent = pieces.join(" · ");
+        card.appendChild(meta);
+
+        if (item.urls && item.urls.markdown) {
+          const actions = document.createElement("div");
+          actions.className = "report-links";
+          const link = document.createElement("a");
+          link.className = "markdown-link";
+          link.href = item.urls.markdown;
+          link.target = "_blank";
+          link.rel = "noreferrer";
+          link.textContent = "查看报告";
+          actions.appendChild(link);
+          card.appendChild(actions);
+        }
+        container.appendChild(card);
+      });
+    }
+
+    async function loadProductReports() {
+      const res = await fetch("/api/product-reports");
+      const data = await res.json();
+      renderProductCards(data.reports || [], data.discoveries || {});
+    }
+
+    async function pollProductJob() {
+      if (!currentProductJobId) return;
+      const res = await fetch(`/api/jobs/${currentProductJobId}`);
+      renderProductJob(await res.json());
+    }
+
     function markdownOutput(outputs) {
       return outputs.find((item) => item.label === "摘要")
         || outputs.find((item) => item.label === "Markdown 总表")
@@ -1752,6 +2006,7 @@ HTML = r"""<!doctype html>
     }
 
     loadHistory();
+    loadProductReports();
 
     el("historyToggle").addEventListener("click", () => {
       el("historyPanel").classList.toggle("open");
@@ -1791,6 +2046,46 @@ HTML = r"""<!doctype html>
       if (timer) clearInterval(timer);
       timer = setInterval(pollJob, 1500);
     });
+
+    el("productForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const range = productDateRange();
+      const payload = {
+        product_name: el("productName").value.trim(),
+        brand_name: el("brandName").value.trim(),
+        category_keyword: el("categoryKeyword").value.trim(),
+        start_date: range.start_date,
+        end_date: range.end_date,
+        intensity: Number(el("productIntensity").value || 0.6),
+        use_llm: el("useLlm").checked,
+        llm_base_url: el("llmBaseUrl").value.trim(),
+        llm_model: el("llmModel").value.trim(),
+        llm_api_key: el("llmApiKey").value,
+        run_mineru: el("runMineru").checked,
+        mineru_token: el("mineruToken").value
+      };
+      saveSettings();
+      el("productReportLinks").textContent = "";
+      el("productSourceList").textContent = "";
+      renderProductJob({
+        id: "提交中",
+        topic: payload.product_name,
+        status: "queued",
+        started_at: "",
+        summary: "正在提交新品报告任务。"
+      });
+      const res = await fetch("/api/product-reports", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload)
+      });
+      const job = await res.json();
+      renderProductJob(job);
+      if (productTimer) clearInterval(productTimer);
+      productTimer = setInterval(pollProductJob, 1500);
+    });
+
+    el("refreshProductsBtn").addEventListener("click", loadProductReports);
 
     el("refreshBtn").addEventListener("click", () => {
       el("historyPanel").classList.remove("open");
@@ -1844,6 +2139,7 @@ class Job:
     logs: list[str] = field(default_factory=list)
     results: list[dict[str, str]] = field(default_factory=list)
     outputs: list[dict[str, str]] = field(default_factory=list)
+    product_report: dict[str, Any] = field(default_factory=dict)
     params_path: str = ""
     process_returncode: int | None = None
     cancel_requested: bool = False
@@ -1884,6 +2180,7 @@ class Job:
             "logs": self.logs,
             "results": self.results,
             "outputs": self.outputs,
+            "product_report": self.product_report,
             "params_path": self.params_path,
             "process_returncode": self.process_returncode,
             "cancel_requested": self.cancel_requested,
@@ -2403,6 +2700,22 @@ def run_history(limit: int = 12) -> list[dict[str, Any]]:
     return [run_payload(path) for path in run_dirs[:limit]]
 
 
+def product_report_with_urls(report: dict[str, Any]) -> dict[str, Any]:
+    item = dict(report)
+    paths = dict(item.get("paths") or {})
+    urls = {}
+    for key, value in paths.items():
+        path = safe_repo_path(str(value))
+        if path and path.is_file():
+            urls[key] = f"/file?path={urllib.parse.quote(str(path))}"
+    item["urls"] = urls
+    return item
+
+
+def product_report_history(limit: int = 20) -> list[dict[str, Any]]:
+    return [product_report_with_urls(item) for item in product_express.report_history(limit)]
+
+
 def latest_screened_pool_csv() -> Path | None:
     candidates_dir = ROOT / "candidates"
     if not candidates_dir.exists():
@@ -2546,6 +2859,60 @@ def run_job(job: Job, payload: dict[str, Any]) -> None:
             job.summary = "任务已在排队时终止。"
             return
         run_job_inner(job, payload)
+
+
+def run_product_report_job(job: Job, payload: dict[str, Any]) -> None:
+    job.summary = "新品报告任务已进入队列，等待前一个任务结束。"
+    with JOB_SEMAPHORE:
+        if job.cancel_requested:
+            job.status = "canceled"
+            job.summary = "新品报告任务已在排队时终止。"
+            return
+        product_payload = {
+            "product_name": str(payload.get("product_name", "")).strip(),
+            "brand_name": str(payload.get("brand_name", "")).strip(),
+            "category_keyword": str(payload.get("category_keyword", "")).strip(),
+        }
+        search_payload = dict(payload)
+        search_payload["topic"] = product_express.product_search_topic(product_payload)
+        search_payload.setdefault("run_mineru", False)
+        job.append(f"Product report search topic: {search_payload['topic']}")
+        run_job_inner(job, search_payload)
+        if job.status == "canceled":
+            return
+        search_failed = job.status == "failed"
+        search_summary = job.summary
+
+        job.append("Generating product express report.")
+        llm_config = {
+            "base_url": str(payload.get("llm_base_url", "")).strip(),
+            "model": str(payload.get("llm_model", "")).strip(),
+            "api_key": str(payload.get("llm_api_key", "")).strip(),
+        }
+        try:
+            report = product_express.write_product_report(product_payload, job.as_dict(), llm_config)
+        except Exception as exc:
+            job.status = "failed"
+            job.summary = f"新品报告生成失败：{type(exc).__name__}: {exc}"
+            job.append(job.summary)
+            return
+
+        job.product_report = product_report_with_urls(report)
+        add_output_item(job.outputs, "新品报告 Markdown", report.get("paths", {}).get("markdown", ""))
+        add_output_item(job.outputs, "新品报告 HTML", report.get("paths", {}).get("html", ""))
+        add_output_item(job.outputs, "新品报告 JSON", report.get("paths", {}).get("json", ""))
+        if search_failed:
+            job.status = "failed"
+            job.summary = f"搜索流程失败，但已生成基础新品报告。原因：{search_summary}"
+        else:
+            job.status = "done"
+            job.summary = (
+                f"新品报告已生成，参考 {report.get('source_count', 0)} 条来源，"
+                f"数据可信度：{report.get('confidence', '低')}。"
+            )
+        job.append(f"Product report Markdown: {report.get('paths', {}).get('markdown', '')}")
+        job.append(f"Product report HTML: {report.get('paths', {}).get('html', '')}")
+        job.append(f"Product report JSON: {report.get('paths', {}).get('json', '')}")
 
 
 def finish_if_canceled(job: Job) -> bool:
@@ -2828,7 +3195,13 @@ class Handler(BaseHTTPRequestHandler):
             except OSError:
                 json_response(self, {"error": "file not readable"}, 404)
                 return
-            content_type = "text/markdown; charset=utf-8" if file_path.suffix.lower() == ".md" else "text/plain; charset=utf-8"
+            suffix = file_path.suffix.lower()
+            content_type = {
+                ".md": "text/markdown; charset=utf-8",
+                ".html": "text/html; charset=utf-8",
+                ".htm": "text/html; charset=utf-8",
+                ".json": "application/json; charset=utf-8",
+            }.get(suffix, "text/plain; charset=utf-8")
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
@@ -2837,6 +3210,27 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path == "/api/history":
             json_response(self, {"history": run_history()})
+            return
+        if self.path == "/api/product-reports":
+            json_response(
+                self,
+                {
+                    "reports": product_report_history(),
+                    "discoveries": product_express.load_discoveries(),
+                },
+            )
+            return
+        if self.path.startswith("/api/product-reports/"):
+            report_id = urllib.parse.unquote(self.path.rsplit("/", 1)[-1])
+            report_dir = safe_repo_path(str(ROOT / "product_reports" / report_id))
+            if not report_dir or not report_dir.is_dir():
+                json_response(self, {"error": "product report not found"}, 404)
+                return
+            data = product_express.report_payload(report_dir)
+            if not data:
+                json_response(self, {"error": "product report not found"}, 404)
+                return
+            json_response(self, product_report_with_urls(data))
             return
         if self.path.startswith("/api/runs/"):
             run_id = urllib.parse.unquote(self.path.rsplit("/", 1)[-1])
@@ -2918,6 +3312,23 @@ class Handler(BaseHTTPRequestHandler):
             with JOBS_LOCK:
                 JOBS[job_id] = job
             thread = threading.Thread(target=run_job, args=(job, payload), daemon=True)
+            thread.start()
+            json_response(self, job.as_dict(), 201)
+            return
+
+        if self.path == "/api/product-reports":
+            payload = read_json(self)
+            product_name = str(payload.get("product_name", "")).strip()
+            if not product_name:
+                json_response(self, {"error": "product_name is required"}, 400)
+                return
+            job_id = uuid.uuid4().hex[:10]
+            brand = str(payload.get("brand_name", "")).strip()
+            topic = " ".join(piece for piece in [brand, product_name] if piece)
+            job = Job(id=job_id, topic=topic or product_name)
+            with JOBS_LOCK:
+                JOBS[job_id] = job
+            thread = threading.Thread(target=run_product_report_job, args=(job, payload), daemon=True)
             thread.start()
             json_response(self, job.as_dict(), 201)
             return
